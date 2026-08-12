@@ -186,7 +186,7 @@ fun MainTabContainer() {
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = Color.White, elevation = 8.dp) {
+            NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
