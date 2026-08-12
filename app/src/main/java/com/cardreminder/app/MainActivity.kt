@@ -51,7 +51,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型
+// 1. 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -70,7 +70,7 @@ data class CardItem(
     val bgValue: String = "0xFFFFFFFF"
 )
 
-// 持久化存储
+// 2. 本地持久化存储
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -201,20 +201,9 @@ fun MainTabContainer() {
 
     var selectedCategoryFilter by remember { mutableStateOf("全部") }
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
-    var showAddDialog by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
-
-    var pickedImageUriStr by remember { mutableStateOf<String?>(null) }
-
-    val photoLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            pickedImageUriStr = it.toString()
-        }
-    }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
 
@@ -244,7 +233,7 @@ fun MainTabContainer() {
                         when (selectedTab) {
                             0 -> "分类浏览"
                             1 -> "我的卡片"
-                            2 -> "添加卡片"
+                            2 -> if (editingCard == null) "新增卡片" else "编辑卡片"
                             else -> "个人中心"
                         },
                         fontWeight = FontWeight.Bold,
@@ -319,8 +308,7 @@ fun MainTabContainer() {
                     selected = selectedTab == 2,
                     onClick = {
                         editingCard = null
-                        pickedImageUriStr = null
-                        showAddDialog = true
+                        selectedTab = 2
                     },
                     icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
                     label = { Text("新增") }
@@ -338,8 +326,7 @@ fun MainTabContainer() {
             when (selectedTab) {
                 0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
                     editingCard = card
-                    pickedImageUriStr = if (card.bgType == "URI") card.bgValue else null
-                    showAddDialog = true
+                    selectedTab = 2
                 })
                 1 -> ListScreen(
                     displayList = displayList,
@@ -352,59 +339,52 @@ fun MainTabContainer() {
                     },
                     onEdit = { card ->
                         editingCard = card
-                        pickedImageUriStr = if (card.bgType == "URI") card.bgValue else null
-                        showAddDialog = true
+                        selectedTab = 2
                     },
                     onDeleteRequest = { card ->
                         deletingCard = card
                     }
                 )
+                2 -> EditCardScreen(
+                    initialCard = editingCard,
+                    onSave = { newCard ->
+                        val updatedList = cardList.filter { it.id != newCard.id } + newCard
+                        cardList = updatedList
+                        CardStorage.saveCards(context, updatedList)
+
+                        try {
+                            val reminderCalendar = Calendar.getInstance().apply {
+                                timeInMillis = newCard.expiryDateMillis
+                                add(Calendar.DAY_OF_MONTH, -newCard.advanceDays)
+                                set(Calendar.HOUR_OF_DAY, newCard.remindHour)
+                                set(Calendar.MINUTE, newCard.remindMinute)
+                                set(Calendar.SECOND, 0)
+                            }
+
+                            var triggerMillis = reminderCalendar.timeInMillis
+                            if (triggerMillis <= System.currentTimeMillis()) {
+                                triggerMillis = System.currentTimeMillis() + 5000L
+                            }
+
+                            CardReminder.setReminder(
+                                context = context,
+                                reminderId = newCard.id.hashCode(),
+                                triggerAtMillis = triggerMillis,
+                                title = "[${newCard.category}] ${newCard.title}",
+                                content = "您的卡片到期提醒到了！"
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+
+                        editingCard = null
+                        selectedTab = 1
+                        Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
+                    }
+                )
                 3 -> ProfileScreen()
             }
         }
-    }
-
-    if (showAddDialog) {
-        CardEditDialog(
-            initialCard = editingCard,
-            pickedImageUri = pickedImageUriStr,
-            onPickPhotoRequest = { photoLauncher.launch("image/*") },
-            onDismiss = { showAddDialog = false },
-            onSave = { newCard ->
-                val updatedList = cardList.filter { it.id != newCard.id } + newCard
-                cardList = updatedList
-                CardStorage.saveCards(context, updatedList)
-
-                try {
-                    val reminderCalendar = Calendar.getInstance().apply {
-                        timeInMillis = newCard.expiryDateMillis
-                        add(Calendar.DAY_OF_MONTH, -newCard.advanceDays)
-                        set(Calendar.HOUR_OF_DAY, newCard.remindHour)
-                        set(Calendar.MINUTE, newCard.remindMinute)
-                        set(Calendar.SECOND, 0)
-                    }
-
-                    var triggerMillis = reminderCalendar.timeInMillis
-                    if (triggerMillis <= System.currentTimeMillis()) {
-                        triggerMillis = System.currentTimeMillis() + 5000L
-                    }
-
-                    CardReminder.setReminder(
-                        context = context,
-                        reminderId = newCard.id.hashCode(),
-                        triggerAtMillis = triggerMillis,
-                        title = "[${newCard.category}] ${newCard.title}",
-                        content = "您的卡片到期提醒到了！"
-                    )
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                showAddDialog = false
-                selectedTab = 1
-                Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
-            }
-        )
     }
 
     if (deletingCard != null) {
@@ -440,6 +420,7 @@ fun MainTabContainer() {
     }
 }
 
+// 首页分类视图
 @Composable
 fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -725,13 +706,11 @@ fun SwipeableCardItem(
     }
 }
 
+// 彻底解决跨 Window 闪退的【原生成员全屏编辑页面】
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun CardEditDialog(
+fun EditCardScreen(
     initialCard: CardItem?,
-    pickedImageUri: String?,
-    onPickPhotoRequest: () -> Unit,
-    onDismiss: () -> Unit,
     onSave: (CardItem) -> Unit
 ) {
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -755,14 +734,6 @@ fun CardEditDialog(
     var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
     var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
 
-    // 安全处理可空类型，解决 Type mismatch 报错
-    LaunchedEffect(pickedImageUri) {
-        if (!pickedImageUri.isNullOrBlank()) {
-            bgType = "URI"
-            bgValue = pickedImageUri
-        }
-    }
-
     val initialCalendar = Calendar.getInstance().apply {
         timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
     }
@@ -777,185 +748,188 @@ fun CardEditDialog(
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (initialCard == null) "新增卡片" else "编辑卡片", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("名称 (如: 招商信用卡)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = cardNumber,
-                    onValueChange = { cardNumber = it },
-                    label = { Text("卡号 / 账号 (选填)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("备注信息 (选填)") },
-                    minLines = 2,
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text("卡片分类:", fontSize = 13.sp, color = Color.Gray)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    categories.forEach { cat ->
-                        FilterChip(
-                            selected = selectedCategory == cat,
-                            onClick = { selectedCategory = cat },
-                            label = { Text(cat) }
-                        )
-                    }
-                }
-
-                Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    presetColors.forEach { (hex, _) ->
-                        val colorVal = Color(hex.toLong(16))
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .background(colorVal)
-                                .border(
-                                    width = if (bgType == "COLOR" && bgValue == hex) 2.dp else 1.dp,
-                                    color = if (bgType == "COLOR" && bgValue == hex) MaterialTheme.colorScheme.primary else Color.LightGray,
-                                    shape = CircleShape
-                                )
-                                .clickable {
-                                    bgType = "COLOR"
-                                    bgValue = hex
-                                }
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = onPickPhotoRequest,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (bgType == "URI") "已选相册" else "相册", fontSize = 12.sp)
-                    }
-                }
-
-                Text("到期日期: ${selectedYear}年 ${selectedMonth}月 ${selectedDay}日", fontSize = 13.sp, color = Color.Gray)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("年: ", fontSize = 12.sp)
-                        IconButton(onClick = { if (selectedYear > currentYear) selectedYear-- }) { Icon(Icons.Default.Remove, null) }
-                        Text("$selectedYear", fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { selectedYear++ }) { Icon(Icons.Default.Add, null) }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("月: ", fontSize = 12.sp)
-                        IconButton(onClick = { if (selectedMonth > 1) selectedMonth-- }) { Icon(Icons.Default.Remove, null) }
-                        Text("$selectedMonth", fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { if (selectedMonth < 12) selectedMonth++ }) { Icon(Icons.Default.Add, null) }
-                    }
-                }
-
-                Text("响铃时刻: ${String.format("%02d:%02d", remindHour, remindMinute)}", fontSize = 13.sp, color = Color.Gray)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("时: ", fontSize = 12.sp)
-                        IconButton(onClick = { if (remindHour > 0) remindHour-- }) { Icon(Icons.Default.Remove, null) }
-                        Text("$remindHour", fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { if (remindHour < 23) remindHour++ }) { Icon(Icons.Default.Add, null) }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("分: ", fontSize = 12.sp)
-                        IconButton(onClick = { if (remindMinute >= 5) remindMinute -= 5 else remindMinute = 0 }) { Icon(Icons.Default.Remove, null) }
-                        Text("$remindMinute", fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { if (remindMinute <= 54) remindMinute += 5 else remindMinute = 59 }) { Icon(Icons.Default.Add, null) }
-                    }
-                }
-
-                Text("提前提醒:", fontSize = 13.sp, color = Color.Gray)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    advanceDaysOptions.forEach { days ->
-                        FilterChip(
-                            selected = advanceDays == days,
-                            onClick = { advanceDays = days },
-                            label = { Text(if (days == 0) "当天" else "${days}天") }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (title.isBlank()) return@Button
-
-                    val calendar = Calendar.getInstance().apply {
-                        set(Calendar.YEAR, selectedYear)
-                        set(Calendar.MONTH, selectedMonth - 1)
-                        set(Calendar.DAY_OF_MONTH, selectedDay)
-                        set(Calendar.HOUR_OF_DAY, remindHour)
-                        set(Calendar.MINUTE, remindMinute)
-                        set(Calendar.SECOND, 0)
-                    }
-
-                    val card = CardItem(
-                        id = initialCard?.id ?: UUID.randomUUID().toString(),
-                        title = title,
-                        cardNumber = cardNumber,
-                        category = selectedCategory,
-                        note = note,
-                        expiryDateMillis = calendar.timeInMillis,
-                        remindHour = remindHour,
-                        remindMinute = remindMinute,
-                        advanceDays = advanceDays,
-                        isRepeat = isRepeat,
-                        repeatDays = repeatDays,
-                        isPinned = initialCard?.isPinned ?: false,
-                        pinTime = initialCard?.pinTime ?: 0L,
-                        bgType = bgType,
-                        bgValue = bgValue
-                    )
-                    onSave(card)
-                }
-            ) {
-                Text("保存")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+    val photoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            bgType = "URI"
+            bgValue = it.toString()
         }
-    )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("名称 (如: 招商信用卡)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = cardNumber,
+            onValueChange = { cardNumber = it },
+            label = { Text("卡号 / 账号 (选填)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = note,
+            onValueChange = { note = it },
+            label = { Text("备注信息 (选填)") },
+            minLines = 2,
+            maxLines = 3,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text("卡片分类:", fontSize = 13.sp, color = Color.Gray)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            categories.forEach { cat ->
+                FilterChip(
+                    selected = selectedCategory == cat,
+                    onClick = { selectedCategory = cat },
+                    label = { Text(cat) }
+                )
+            }
+        }
+
+        Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            presetColors.forEach { (hex, _) ->
+                val colorVal = Color(hex.toLong(16))
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(colorVal)
+                        .border(
+                            width = if (bgType == "COLOR" && bgValue == hex) 2.dp else 1.dp,
+                            color = if (bgType == "COLOR" && bgValue == hex) MaterialTheme.colorScheme.primary else Color.LightGray,
+                            shape = CircleShape
+                        )
+                        .clickable {
+                            bgType = "COLOR"
+                            bgValue = hex
+                        }
+                )
+            }
+
+            OutlinedButton(
+                onClick = { photoLauncher.launch("image/*") },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(if (bgType == "URI") "已选相册" else "选择相册", fontSize = 12.sp)
+            }
+        }
+
+        Text("到期日期: ${selectedYear}年 ${selectedMonth}月 ${selectedDay}日", fontSize = 13.sp, color = Color.Gray)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("年: ", fontSize = 12.sp)
+                IconButton(onClick = { if (selectedYear > currentYear) selectedYear-- }) { Icon(Icons.Default.Remove, null) }
+                Text("$selectedYear", fontWeight = FontWeight.Bold)
+                IconButton(onClick = { selectedYear++ }) { Icon(Icons.Default.Add, null) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("月: ", fontSize = 12.sp)
+                IconButton(onClick = { if (selectedMonth > 1) selectedMonth-- }) { Icon(Icons.Default.Remove, null) }
+                Text("$selectedMonth", fontWeight = FontWeight.Bold)
+                IconButton(onClick = { if (selectedMonth < 12) selectedMonth++ }) { Icon(Icons.Default.Add, null) }
+            }
+        }
+
+        Text("响铃时刻: ${String.format("%02d:%02d", remindHour, remindMinute)}", fontSize = 13.sp, color = Color.Gray)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("时: ", fontSize = 12.sp)
+                IconButton(onClick = { if (remindHour > 0) remindHour-- }) { Icon(Icons.Default.Remove, null) }
+                Text("$remindHour", fontWeight = FontWeight.Bold)
+                IconButton(onClick = { if (remindHour < 23) remindHour++ }) { Icon(Icons.Default.Add, null) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("分: ", fontSize = 12.sp)
+                IconButton(onClick = { if (remindMinute >= 5) remindMinute -= 5 else remindMinute = 0 }) { Icon(Icons.Default.Remove, null) }
+                Text("$remindMinute", fontWeight = FontWeight.Bold)
+                IconButton(onClick = { if (remindMinute <= 54) remindMinute += 5 else remindMinute = 59 }) { Icon(Icons.Default.Add, null) }
+            }
+        }
+
+        Text("提前提醒:", fontSize = 13.sp, color = Color.Gray)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            advanceDaysOptions.forEach { days ->
+                FilterChip(
+                    selected = advanceDays == days,
+                    onClick = { advanceDays = days },
+                    label = { Text(if (days == 0) "当天" else "${days}天") }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Button(
+            onClick = {
+                if (title.isBlank()) return@Button
+
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, selectedYear)
+                    set(Calendar.MONTH, selectedMonth - 1)
+                    set(Calendar.DAY_OF_MONTH, selectedDay)
+                    set(Calendar.HOUR_OF_DAY, remindHour)
+                    set(Calendar.MINUTE, remindMinute)
+                    set(Calendar.SECOND, 0)
+                }
+
+                val card = CardItem(
+                    id = initialCard?.id ?: UUID.randomUUID().toString(),
+                    title = title,
+                    cardNumber = cardNumber,
+                    category = selectedCategory,
+                    note = note,
+                    expiryDateMillis = calendar.timeInMillis,
+                    remindHour = remindHour,
+                    remindMinute = remindMinute,
+                    advanceDays = advanceDays,
+                    isRepeat = isRepeat,
+                    repeatDays = repeatDays,
+                    isPinned = initialCard?.isPinned ?: false,
+                    pinTime = initialCard?.pinTime ?: 0L,
+                    bgType = bgType,
+                    bgValue = bgValue
+                )
+                onSave(card)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("保存卡片信息", fontSize = 16.sp)
+        }
+    }
 }
 
 @Composable
@@ -969,7 +943,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v2.1", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v2.2", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
