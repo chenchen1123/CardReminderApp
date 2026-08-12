@@ -13,6 +13,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.PushPin
@@ -34,6 +35,7 @@ import java.util.*
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
+    val cardNumber: String = "", // 卡号字段
     val category: String,
     val expiryDateMillis: Long,
     val advanceDays: Int = 0,
@@ -62,7 +64,14 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme {
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Color(0xFF1E88E5),
+                    secondary = Color(0xFF26A69A),
+                    background = Color(0xFFF5F7FA),
+                    surface = Color.White
+                )
+            ) {
                 MainTabContainer()
             }
         }
@@ -73,13 +82,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainTabContainer() {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(0) } // 0:首页, 1:列表, 2:新增, 3:我的
+    var selectedTab by remember { mutableStateOf(1) } // 默认显示列表页
 
     var cardList by remember {
         mutableStateOf(
             listOf(
-                CardItem("1", "招商银行信用卡", "银行卡", System.currentTimeMillis() + 86400000L * 15, 3, true, 30, true, System.currentTimeMillis()),
-                CardItem("2", "移动手机卡到期", "电话卡", System.currentTimeMillis() + 86400000L * 5, 1, false, 0, false)
+                CardItem("1", "招商银行信用卡", "6222 **** **** 8888", "银行卡", System.currentTimeMillis() + 86400000L * 15, 3, true, 30, true, System.currentTimeMillis()),
+                CardItem("2", "移动手机卡到期", "138 **** 9999", "电话卡", System.currentTimeMillis() + 86400000L * 5, 1, false, 0, false)
             )
         )
     }
@@ -88,11 +97,11 @@ fun MainTabContainer() {
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
+    var deletingCard by remember { mutableStateOf<CardItem?>(null) } // 删除二次确认对象
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
 
-    // 筛选与排序算法
     val displayList = remember(cardList, selectedCategoryFilter, currentSortOrder) {
         cardList.filter { selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter }
             .sortedWith { a, b ->
@@ -111,17 +120,19 @@ fun MainTabContainer() {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         when (selectedTab) {
                             0 -> "首页概览"
-                            1 -> "卡片提醒列表"
+                            1 -> "我的卡片"
                             2 -> "添加卡片"
                             else -> "个人中心"
                         },
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
                     )
                 },
                 actions = {
@@ -175,8 +186,7 @@ fun MainTabContainer() {
             )
         },
         bottomBar = {
-            // 恢复底部导航栏
-            NavigationBar {
+            NavigationBar(containerColor = Color.White, elevation = 8.dp) {
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
@@ -186,8 +196,8 @@ fun MainTabContainer() {
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Default.List, contentDescription = "列表") },
-                    label = { Text("列表") }
+                    icon = { Icon(Icons.Default.CreditCard, contentDescription = "列表") },
+                    label = { Text("卡片") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
@@ -221,32 +231,8 @@ fun MainTabContainer() {
                         editingCard = card
                         showAddDialog = true
                     },
-                    onDelete = { card ->
-                        cardList = cardList.filter { it.id != card.id }
-                        CardReminder.cancelReminder(context, card.id.hashCode())
-                        Toast.makeText(context, "卡片已删除", Toast.LENGTH_SHORT).show()
-                    },
-                    onMoveUp = { index ->
-                        if (index > 0) {
-                            val mutable = cardList.toMutableList()
-                            val fromIndex = mutable.indexOf(displayList[index])
-                            val toIndex = mutable.indexOf(displayList[index - 1])
-                            if (fromIndex != -1 && toIndex != -1) {
-                                Collections.swap(mutable, fromIndex, toIndex)
-                                cardList = mutable
-                            }
-                        }
-                    },
-                    onMoveDown = { index ->
-                        if (index < displayList.size - 1) {
-                            val mutable = cardList.toMutableList()
-                            val fromIndex = mutable.indexOf(displayList[index])
-                            val toIndex = mutable.indexOf(displayList[index + 1])
-                            if (fromIndex != -1 && toIndex != -1) {
-                                Collections.swap(mutable, fromIndex, toIndex)
-                                cardList = mutable
-                            }
-                        }
+                    onDeleteRequest = { card ->
+                        deletingCard = card // 触发表单删除二次确认
                     }
                 )
                 3 -> ProfileScreen()
@@ -254,6 +240,7 @@ fun MainTabContainer() {
         }
     }
 
+    // 新增 / 编辑 弹窗
     if (showAddDialog) {
         CardEditDialog(
             initialCard = editingCard,
@@ -272,92 +259,111 @@ fun MainTabContainer() {
                 )
 
                 showAddDialog = false
-                selectedTab = 1 // 保存后跳转至列表页
-                Toast.makeText(context, "卡片保存成功", Toast.LENGTH_SHORT).show()
+                selectedTab = 1
+                Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    // 删除二次确认弹窗
+    if (deletingCard != null) {
+        AlertDialog(
+            onDismissRequest = { deletingCard = null },
+            title = { Text("确认删除", fontWeight = FontWeight.Bold) },
+            text = { Text("确定要删除卡片“${deletingCard?.title}”吗？此操作无法撤销。") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        deletingCard?.let { card ->
+                            cardList = cardList.filter { it.id != card.id }
+                            CardReminder.cancelReminder(context, card.id.hashCode())
+                            Toast.makeText(context, "已被删除", Toast.LENGTH_SHORT).show()
+                        }
+                        deletingCard = null
+                    }
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingCard = null }) {
+                    Text("取消")
+                }
             }
         )
     }
 }
 
-// 1. 首页视图
+// 首页
 @Composable
 fun HomeScreen(cardList: List<CardItem>) {
-    val pinnedCount = cardList.count { it.isPinned }
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Card(
+        ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("提醒汇总概览", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("卡片总数: ${cardList.size} 张", fontSize = 16.sp)
-                Text("置顶卡片: $pinnedCount 张", fontSize = 16.sp)
+                Text("卡片状态统计", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("总卡片数量", color = Color.DarkGray)
+                    Text("${cardList.size} 张", fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("置顶卡片", color = Color.DarkGray)
+                    Text("${cardList.count { it.isPinned }} 张", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
 }
 
-// 2. 列表视图
+// 列表视图
 @Composable
 fun ListScreen(
     displayList: List<CardItem>,
     onTogglePin: (CardItem) -> Unit,
     onEdit: (CardItem) -> Unit,
-    onDelete: (CardItem) -> Unit,
-    onMoveUp: (Int) -> Unit,
-    onMoveDown: (Int) -> Unit
+    onDeleteRequest: (CardItem) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        itemsIndexed(displayList, key = { _, item -> item.id }) { index, card ->
-            SwipeableCardItem(
-                card = card,
-                onTogglePin = { onTogglePin(card) },
-                onEdit = { onEdit(card) },
-                onDelete = { onDelete(card) },
-                onMoveUp = { onMoveUp(index) },
-                onMoveDown = { onMoveDown(index) }
-            )
+    if (displayList.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("暂无卡片数据，点击底部“新增”添加", color = Color.Gray)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            itemsIndexed(displayList, key = { _, item -> item.id }) { _, card ->
+                SwipeableCardItem(
+                    card = card,
+                    onTogglePin = { onTogglePin(card) },
+                    onEdit = { onEdit(card) },
+                    onDelete = { onDeleteRequest(card) }
+                )
+            }
         }
     }
 }
 
-// 3. 我的视图
-@Composable
-fun ProfileScreen() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.0", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("本地数据防丢与智能提醒系统", color = Color.Gray, fontSize = 14.sp)
-    }
-}
-
-// 交互卡片与编辑对话框保持不变
+// 可操作卡片项
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
     card: CardItem,
     onTogglePin: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
+    onDelete: () -> Unit
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -366,7 +372,7 @@ fun SwipeableCardItem(
                 false
             } else if (value == SwipeToDismissBoxValue.EndToStart) {
                 onDelete()
-                true
+                false
             } else false
         }
     )
@@ -382,20 +388,14 @@ fun SwipeableCardItem(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(color)
+                    .background(color, shape = RoundedCornerShape(12.dp))
                     .padding(horizontal = 20.dp),
                 contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
             ) {
                 if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Edit, contentDescription = "编辑", tint = Color.White)
-                        Text(" 编辑", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
+                    Icon(Icons.Default.Edit, contentDescription = "编辑", tint = Color.White)
                 } else if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("删除 ", color = Color.White, fontWeight = FontWeight.Bold)
-                        Icon(Icons.Default.Delete, contentDescription = "删除", tint = Color.White)
-                    }
+                    Icon(Icons.Default.Delete, contentDescription = "删除", tint = Color.White)
                 }
             }
         }
@@ -403,58 +403,70 @@ fun SwipeableCardItem(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(
-                    onClick = { onEdit() },
-                    onLongClick = { onMoveUp() }
-                ),
+                .combinedClickable(onClick = { onEdit() }),
+            shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (card.isPinned) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface
+                containerColor = if (card.isPinned) Color(0xFFE3F2FD) else Color.White
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(16.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        AssistChip(
-                            onClick = { },
+                        SuggestionChip(
+                            onClick = {},
                             label = { Text(card.category, fontSize = 12.sp) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(card.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                    Text("到期日期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp, color = Color.Gray)
-                    Text(
-                        "提醒: 提前 ${card.advanceDays} 天 | ${if (card.isRepeat) "重复周期 ${card.repeatDays}天" else "当天提醒"}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+
+                    Row {
+                        IconButton(onClick = onTogglePin) {
+                            Icon(
+                                imageVector = if (card.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                contentDescription = "置顶",
+                                tint = if (card.isPinned) MaterialTheme.colorScheme.primary else Color.Gray
+                            )
+                        }
+                        IconButton(onClick = onDelete) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = Color.Gray)
+                        }
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onTogglePin) {
-                        Icon(
-                            imageVector = if (card.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = "置顶",
-                            tint = if (card.isPinned) MaterialTheme.colorScheme.primary else Color.Gray
-                        )
-                    }
-                    IconButton(onClick = onMoveDown) {
-                        Icon(Icons.Default.DragHandle, contentDescription = "微调", tint = Color.LightGray)
-                    }
+                if (card.cardNumber.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 13.sp, color = Color.Gray)
+                    Text(
+                        if (card.isRepeat) "周期: ${card.repeatDays}天" else "提前 ${card.advanceDays} 天",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
     }
 }
 
+// 修复新增/编辑表单 (防止闪退并加入卡号与日期)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -466,12 +478,15 @@ fun CardEditDialog(
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
 
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
+    var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
+    var dateString by remember { mutableStateOf(sdf.format(Date(initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)))) }
     var advanceDays by remember { mutableStateOf(initialCard?.advanceDays ?: 0) }
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
-    var expiryMillis by remember { mutableStateOf(initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 7)) }
 
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
     var advanceDropdownExpanded by remember { mutableStateOf(false) }
@@ -479,7 +494,7 @@ fun CardEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialCard == null) "新增卡片提醒" else "编辑卡片提醒") },
+        title = { Text(if (initialCard == null) "新增卡片" else "编辑卡片", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -488,7 +503,24 @@ fun CardEditDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("卡片名称/说明") },
+                    label = { Text("名称 (如: 招商信用卡)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = cardNumber,
+                    onValueChange = { cardNumber = it },
+                    label = { Text("卡号 / 账号 (选填)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = dateString,
+                    onValueChange = { dateString = it },
+                    label = { Text("到期日期 (格式: YYYY-MM-DD)") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -530,7 +562,7 @@ fun CardEditDialog(
                         value = if (advanceDays == 0) "当天提醒" else "提前 $advanceDays 天",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("提前提醒") },
+                        label = { Text("提前提醒天数") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = advanceDropdownExpanded) },
                         modifier = Modifier
                             .menuAnchor()
@@ -557,16 +589,16 @@ fun CardEditDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("提醒模式:")
+                    Text("提醒模式:", fontSize = 14.sp)
                     FilterChip(
                         selected = !isRepeat,
                         onClick = { isRepeat = false },
-                        label = { Text("当天提醒") }
+                        label = { Text("单次") }
                     )
                     FilterChip(
                         selected = isRepeat,
                         onClick = { isRepeat = true },
-                        label = { Text("重复提醒") }
+                        label = { Text("周期重复") }
                     )
                 }
 
@@ -576,10 +608,10 @@ fun CardEditDialog(
                         onExpandedChange = { repeatDropdownExpanded = !repeatDropdownExpanded }
                     ) {
                         OutlinedTextField(
-                            value = "每 $repeatDays 天提醒一次",
+                            value = "每 $repeatDays 天",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("提醒周期") },
+                            label = { Text("重复周期") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = repeatDropdownExpanded) },
                             modifier = Modifier
                                 .menuAnchor()
@@ -607,11 +639,18 @@ fun CardEditDialog(
             Button(
                 onClick = {
                     if (title.isBlank()) return@Button
+                    val parsedDateMillis = try {
+                        sdf.parse(dateString)?.time ?: System.currentTimeMillis()
+                    } catch (e: Exception) {
+                        System.currentTimeMillis()
+                    }
+
                     val card = CardItem(
                         id = initialCard?.id ?: UUID.randomUUID().toString(),
                         title = title,
+                        cardNumber = cardNumber,
                         category = selectedCategory,
-                        expiryDateMillis = expiryMillis,
+                        expiryDateMillis = parsedDateMillis,
                         advanceDays = advanceDays,
                         isRepeat = isRepeat,
                         repeatDays = repeatDays,
@@ -628,4 +667,21 @@ fun CardEditDialog(
             TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
+}
+
+// 我的页面
+@Composable
+fun ProfileScreen() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("卡片提醒助手 v1.2", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
+    }
 }
