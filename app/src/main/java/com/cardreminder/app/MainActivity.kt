@@ -1,23 +1,32 @@
 package com.cardreminder.app
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,19 +36,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型
+// 数据模型 (加入 bgType 背景类型 与 bgValue 自定义背景值)
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -53,10 +65,12 @@ data class CardItem(
     val isRepeat: Boolean = false,
     val repeatDays: Int = 7,
     val isPinned: Boolean = false,
-    val pinTime: Long = 0L
+    val pinTime: Long = 0L,
+    val bgType: String = "COLOR", // COLOR: 纯色/内置Preset, URI: 相册图片
+    val bgValue: String = "0xFFFFFFFF" // 颜色的 HEX 值或相册图片的 Uri 字符串
 )
 
-// SharedPreferences 数据持久化工具
+// 数据持久化
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -78,6 +92,8 @@ object CardStorage {
                 put("repeatDays", card.repeatDays)
                 put("isPinned", card.isPinned)
                 put("pinTime", card.pinTime)
+                put("bgType", card.bgType)
+                put("bgValue", card.bgValue)
             }
             jsonArray.put(obj)
         }
@@ -107,7 +123,9 @@ object CardStorage {
                         isRepeat = obj.optBoolean("isRepeat", false),
                         repeatDays = obj.optInt("repeatDays", 7),
                         isPinned = obj.optBoolean("isPinned", false),
-                        pinTime = obj.optLong("pinTime", 0L)
+                        pinTime = obj.optLong("pinTime", 0L),
+                        bgType = obj.optString("bgType", "COLOR"),
+                        bgValue = obj.optString("bgValue", "0xFFFFFFFF")
                     )
                 )
             }
@@ -124,17 +142,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    101
-                )
-            }
-        }
+        // 检查并申请通知权限与精准闹钟权限（解决闹钟不提醒）
+        checkAndRequestPermissions(this)
 
         setContent {
             MaterialTheme(
@@ -146,6 +155,31 @@ class MainActivity : ComponentActivity() {
                 )
             ) {
                 MainTabContainer()
+            }
+        }
+    }
+
+    private fun checkAndRequestPermissions(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    101
+                )
+            }
+        }
+
+        // Android 12+ 精准闹钟权限引导，解决闹钟不发提醒的问题
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!alarmManager.canScheduleExactAlarms()) {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                context.startActivity(intent)
             }
         }
     }
@@ -347,7 +381,7 @@ fun MainTabContainer() {
 
                 showAddDialog = false
                 selectedTab = 1
-                Toast.makeText(context, "卡片已永久保存！", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "卡片已更新并保存！", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -385,7 +419,7 @@ fun MainTabContainer() {
     }
 }
 
-// 1. 首页：按分类分组展示，每类横向滑动
+// 首页：分组展现
 @Composable
 fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -436,41 +470,67 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
     }
 }
 
-// 首页横向滑动的单个卡片样式（添加注解修复 Warning/Error 报错）
+// 首页横向卡片，支持自定义背景与相册图片展示
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
     Card(
         modifier = Modifier
             .width(220.dp)
             .height(130.dp)
             .combinedClickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(card.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                if (card.cardNumber.isNotBlank()) {
-                    Text(card.cardNumber, fontSize = 12.sp, color = Color.DarkGray, maxLines = 1)
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 背景处理
+            if (card.bgType == "URI") {
+                AsyncImage(
+                    model = card.bgValue,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                // 半透明黑色遮罩，保证文字清晰
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.3f))
+                )
+            } else {
+                val colorHex = card.bgValue.toLongOrNull(16) ?: 0xFFFFFFFF
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(colorHex))
+                )
+            }
+
+            val textColor = if (card.bgType == "URI" || card.bgValue.contains("0xFF1E88E5") || card.bgValue.contains("0xFF26A69A")) Color.White else Color.Black
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(card.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = textColor)
+                    if (card.cardNumber.isNotBlank()) {
+                        Text(card.cardNumber, fontSize = 12.sp, color = textColor.copy(alpha = 0.8f), maxLines = 1)
+                    }
                 }
+                if (card.note.isNotBlank()) {
+                    Text("备注: ${card.note}", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f), maxLines = 1)
+                }
+                Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Bold)
             }
-            if (card.note.isNotBlank()) {
-                Text("备注: ${card.note}", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
-            }
-            Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
 
-// 2. 列表视图
 @Composable
 fun ListScreen(
     displayList: List<CardItem>,
@@ -500,7 +560,7 @@ fun ListScreen(
     }
 }
 
-// 列表单项卡片
+// 列表单项卡片，完美支持内置纯色与相册图片自定义背景
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
@@ -551,90 +611,105 @@ fun SwipeableCardItem(
                 .fillMaxWidth()
                 .combinedClickable(onClick = { expandedNote = !expandedNote }),
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (card.isPinned) Color(0xFFE3F2FD) else Color.White
-            ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text(card.category, fontSize = 12.sp) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(card.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Row {
-                        IconButton(onClick = onTogglePin) {
-                            Icon(
-                                imageVector = if (card.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                contentDescription = "置顶",
-                                tint = if (card.isPinned) MaterialTheme.colorScheme.primary else Color.Gray
-                            )
-                        }
-                        IconButton(onClick = onDelete) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = Color.Gray)
-                        }
-                    }
-                }
-
-                if (card.cardNumber.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
-                }
-
-                if (card.note.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    AnimatedVisibility(visible = expandedNote) {
-                        Surface(
-                            color = Color(0xFFF0F4F8),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "备注: ${card.note}",
-                                fontSize = 13.sp,
-                                color = Color.DarkGray,
-                                modifier = Modifier.padding(8.dp)
-                            )
-                        }
-                    }
-                    if (!expandedNote) {
-                        Text("点击卡片查看备注...", fontSize = 11.sp, color = Color.LightGray)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val timeStr = String.format("%02d:%02d", card.remindHour, card.remindMinute)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 13.sp, color = Color.Gray)
-                    Text(
-                        "提醒时间: $timeStr (提前${card.advanceDays}天)",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.primary
+            Box(modifier = Modifier.fillMaxWidth()) {
+                if (card.bgType == "URI") {
+                    AsyncImage(
+                        model = card.bgValue,
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop
                     )
+                    Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.35f)))
+                } else {
+                    val colorHex = card.bgValue.toLongOrNull(16) ?: 0xFFFFFFFF
+                    Box(modifier = Modifier.matchParentSize().background(Color(colorHex)))
+                }
+
+                val textColor = if (card.bgType == "URI" || card.bgValue.contains("0xFF1E88E5") || card.bgValue.contains("0xFF26A69A")) Color.White else Color.Black
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            SuggestionChip(
+                                onClick = {},
+                                label = { Text(card.category, fontSize = 12.sp) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(card.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        }
+
+                        Row {
+                            IconButton(onClick = onTogglePin) {
+                                Icon(
+                                    imageVector = if (card.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                    contentDescription = "置顶",
+                                    tint = if (card.isPinned) MaterialTheme.colorScheme.primary else textColor.copy(alpha = 0.6f)
+                                )
+                            }
+                            IconButton(onClick = onDelete) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textColor.copy(alpha = 0.6f))
+                            }
+                        }
+                    }
+
+                    if (card.cardNumber.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = textColor.copy(alpha = 0.85f), fontWeight = FontWeight.Medium)
+                    }
+
+                    if (card.note.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        AnimatedVisibility(visible = expandedNote) {
+                            Surface(
+                                color = Color.White.copy(alpha = 0.85f),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "备注: ${card.note}",
+                                    fontSize = 13.sp,
+                                    color = Color.Black,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
+                        if (!expandedNote) {
+                            Text("点击卡片查看备注...", fontSize = 11.sp, color = textColor.copy(alpha = 0.6f))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    val timeStr = String.format("%02d:%02d", card.remindHour, card.remindMinute)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 13.sp, color = textColor.copy(alpha = 0.8f))
+                        Text(
+                            "提醒时间: $timeStr (提前${card.advanceDays}天)",
+                            fontSize = 12.sp,
+                            color = textColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-// 支持新增备注多行输入的编辑框
+// 可选的编辑对话框：包含自定义纯色背景选择与手机相册图片选择
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -645,6 +720,15 @@ fun CardEditDialog(
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
+
+    // 内置经典纯色预设
+    val presetColors = listOf(
+        "0xFFFFFFFF" to "经典白",
+        "0xFFE3F2FD" to "淡蓝",
+        "0xFF1E88E5" to "极光蓝",
+        "0xFF26A69A" to "森林绿",
+        "0xFFFF7043" to "日落橙"
+    )
 
     val hourOptions = (0..23).toList()
     val minuteOptions = (0..59).toList()
@@ -659,6 +743,9 @@ fun CardEditDialog(
     var note by remember { mutableStateOf(initialCard?.note ?: "") }
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
 
+    var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
+    var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
+
     val initialCalendar = Calendar.getInstance().apply {
         timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
     }
@@ -672,6 +759,16 @@ fun CardEditDialog(
     var advanceDays by remember { mutableStateOf(initialCard?.advanceDays ?: 0) }
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
+
+    // 相册图片选择器
+    val photoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            bgType = "URI"
+            bgValue = it.toString()
+        }
+    }
 
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
     var yearExpanded by remember { mutableStateOf(false) }
@@ -717,6 +814,45 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // 1. 卡片自定义背景设置
+                Text("自定义卡片背景风格:", fontSize = 13.sp, color = Color.Gray)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 内置纯色预设选项
+                    presetColors.forEach { (hex, name) ->
+                        val colorVal = Color(hex.toLong(16))
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(colorVal)
+                                .border(
+                                    width = if (bgType == "COLOR" && bgValue == hex) 2.dp else 1.dp,
+                                    color = if (bgType == "COLOR" && bgValue == hex) MaterialTheme.colorScheme.primary else Color.LightGray,
+                                    shape = CircleShape
+                                )
+                                .clickable {
+                                    bgType = "COLOR"
+                                    bgValue = hex
+                                }
+                        )
+                    }
+
+                    // 自定义相册图片按钮
+                    OutlinedButton(
+                        onClick = { photoLauncher.launch("image/*") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("相册", fontSize = 12.sp)
+                    }
+                }
+
+                // 2. 分类选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
                     onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
@@ -747,6 +883,7 @@ fun CardEditDialog(
                     }
                 }
 
+                // 3. 到期日期
                 Text("到期日期设定:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -810,6 +947,7 @@ fun CardEditDialog(
                     }
                 }
 
+                // 4. 响铃精确时间
                 Text("精确闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -854,6 +992,7 @@ fun CardEditDialog(
                     }
                 }
 
+                // 5. 提前提醒
                 ExposedDropdownMenuBox(
                     expanded = advanceDropdownExpanded,
                     onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
@@ -884,6 +1023,7 @@ fun CardEditDialog(
                     }
                 }
 
+                // 6. 提醒模式
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -962,7 +1102,9 @@ fun CardEditDialog(
                         isRepeat = isRepeat,
                         repeatDays = repeatDays,
                         isPinned = initialCard?.isPinned ?: false,
-                        pinTime = initialCard?.pinTime ?: 0L
+                        pinTime = initialCard?.pinTime ?: 0L,
+                        bgType = bgType,
+                        bgValue = bgValue
                     )
                     onSave(card)
                 }
@@ -987,7 +1129,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.7", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v1.8", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
