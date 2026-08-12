@@ -34,6 +34,10 @@ android {
 }
 
 dependencies {
+    // 补上这行依赖以解决主题缺失问题
+    implementation("androidx.appcompat:appcompat:1.6.1")
+
+    // 原有的 Compose 依赖保持不变
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
