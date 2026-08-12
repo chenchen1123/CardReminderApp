@@ -51,7 +51,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 1. 数据模型
+// 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -70,7 +70,7 @@ data class CardItem(
     val bgValue: String = "0xFFFFFFFF"
 )
 
-// 2. 持久化存储
+// 持久化存储
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -206,10 +206,8 @@ fun MainTabContainer() {
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
-    // 全局相册图片临时选择状态
     var pickedImageUriStr by remember { mutableStateOf<String?>(null) }
 
-    // 将相册图片 Launcher 放在页面顶级安全作用域，彻底解决生命周期闪退
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -727,7 +725,6 @@ fun SwipeableCardItem(
     }
 }
 
-// 稳定无崩弹窗组件：与 Launcher 解耦，通过事件回调调起相册
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CardEditDialog(
@@ -758,9 +755,9 @@ fun CardEditDialog(
     var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
     var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
 
-    // 当用户在相册选中图片后，实时更新弹窗状态
+    // 安全处理可空类型，解决 Type mismatch 报错
     LaunchedEffect(pickedImageUri) {
-        if (!pickedImageUri.isNullBlinking()) {
+        if (!pickedImageUri.isNullOrBlank()) {
             bgType = "URI"
             bgValue = pickedImageUri
         }
@@ -815,7 +812,6 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 1. 分类 ChoiceChip 组
                 Text("卡片分类:", fontSize = 13.sp, color = Color.Gray)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -830,7 +826,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 2. 背景设置
                 Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -866,7 +861,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 3. 到期时间调节
                 Text("到期日期: ${selectedYear}年 ${selectedMonth}月 ${selectedDay}日", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -887,7 +881,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 4. 响铃精确时间
                 Text("响铃时刻: ${String.format("%02d:%02d", remindHour, remindMinute)}", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -908,7 +901,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 5. 提前提醒
                 Text("提前提醒:", fontSize = 13.sp, color = Color.Gray)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -965,9 +957,6 @@ fun CardEditDialog(
         }
     )
 }
-
-// 辅助扩展函数，判断字符串非空
-fun String?.isNullBlinking(): Boolean = this == null || this.isBlank()
 
 @Composable
 fun ProfileScreen() {
