@@ -33,13 +33,15 @@ import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型
+// 数据模型 (增加提醒小时、分钟字段)
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val cardNumber: String = "",
     val category: String,
     val expiryDateMillis: Long,
+    val remindHour: Int = 9,    // 默认上午 9 点提醒
+    val remindMinute: Int = 0,  // 默认 0 分
     val advanceDays: Int = 0,
     val isRepeat: Boolean = false,
     val repeatDays: Int = 7,
@@ -89,8 +91,8 @@ fun MainTabContainer() {
     var cardList by remember {
         mutableStateOf(
             listOf(
-                CardItem("1", "招商银行信用卡", "6222 **** **** 8888", "银行卡", System.currentTimeMillis() + 86400000L * 15, 3, true, 30, true, System.currentTimeMillis()),
-                CardItem("2", "移动手机卡到期", "138 **** 9999", "电话卡", System.currentTimeMillis() + 86400000L * 5, 1, false, 0, false)
+                CardItem("1", "招商银行信用卡", "6222 **** **** 8888", "银行卡", System.currentTimeMillis() + 86400000L * 15, 9, 0, 3, true, 30, true, System.currentTimeMillis()),
+                CardItem("2", "移动手机卡到期", "138 **** 9999", "电话卡", System.currentTimeMillis() + 86400000L * 5, 10, 30, 1, false, 0, false)
             )
         )
     }
@@ -247,25 +249,40 @@ fun MainTabContainer() {
             initialCard = editingCard,
             onDismiss = { showAddDialog = false },
             onSave = { newCard ->
-                try {
-                    val updatedList = cardList.filter { it.id != newCard.id } + newCard
-                    cardList = updatedList
+                // 1. 本地更新卡片列表
+                val updatedList = cardList.filter { it.id != newCard.id } + newCard
+                cardList = updatedList
 
-                    val triggerTime = newCard.expiryDateMillis - (newCard.advanceDays * 86400000L)
+                // 2. 计算精准闹钟提醒时间 (到期日 - 提前天数，设定小时和分钟)
+                try {
+                    val reminderCalendar = Calendar.getInstance().apply {
+                        timeInMillis = newCard.expiryDateMillis
+                        add(Calendar.DAY_OF_MONTH, -newCard.advanceDays)
+                        set(Calendar.HOUR_OF_DAY, newCard.remindHour)
+                        set(Calendar.MINUTE, newCard.remindMinute)
+                        set(Calendar.SECOND, 0)
+                    }
+
+                    var triggerMillis = reminderCalendar.timeInMillis
+                    // 如果计算出的时间早于当前系统时间，设为 5 秒后直接触发作为体验
+                    if (triggerMillis <= System.currentTimeMillis()) {
+                        triggerMillis = System.currentTimeMillis() + 5000L
+                    }
+
                     CardReminder.setReminder(
                         context = context,
                         reminderId = newCard.id.hashCode(),
-                        triggerAtMillis = if (triggerTime > System.currentTimeMillis()) triggerTime else System.currentTimeMillis() + 5000L,
+                        triggerAtMillis = triggerMillis,
                         title = "[${newCard.category}] ${newCard.title}",
                         content = "您的卡片到期提醒到了！"
                     )
-
-                    showAddDialog = false
-                    selectedTab = 1
-                    Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    Toast.makeText(context, "保存失败，请重试", Toast.LENGTH_SHORT).show()
+                    // 安全容错，保证界面保存不受闹钟服务故障影响
                 }
+
+                showAddDialog = false
+                selectedTab = 1
+                Toast.makeText(context, "卡片已成功保存！", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -281,7 +298,9 @@ fun MainTabContainer() {
                     onClick = {
                         deletingCard?.let { card ->
                             cardList = cardList.filter { it.id != card.id }
-                            CardReminder.cancelReminder(context, card.id.hashCode())
+                            try {
+                                CardReminder.cancelReminder(context, card.id.hashCode())
+                            } catch (e: Exception) { }
                             Toast.makeText(context, "已被删除", Toast.LENGTH_SHORT).show()
                         }
                         deletingCard = null
@@ -451,14 +470,15 @@ fun SwipeableCardItem(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val timeStr = String.format("%02d:%02d", card.remindHour, card.remindMinute)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 13.sp, color = Color.Gray)
                     Text(
-                        if (card.isRepeat) "周期: ${card.repeatDays}天" else "提前 ${card.advanceDays} 天",
-                        fontSize = 13.sp,
+                        "提醒时间: $timeStr (提前${card.advanceDays}天)",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -467,7 +487,7 @@ fun SwipeableCardItem(
     }
 }
 
-// 支持自由滑动、年月日下拉自由选择的对话框
+// 可滑动的自定义对话框 (含年月日及自定义提醒具体时间)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -479,13 +499,14 @@ fun CardEditDialog(
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
 
-    // 日期下拉数据源
+    val hourOptions = (0..23).toList()
+    val minuteOptions = listOf(0, 15, 30, 45)
+
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     val yearOptions = (currentYear..currentYear + 10).toList()
     val monthOptions = (1..12).toList()
     val dayOptions = (1..31).toList()
 
-    // 状态定义
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
@@ -497,15 +518,19 @@ fun CardEditDialog(
     var selectedMonth by remember { mutableStateOf(initialCalendar.get(Calendar.MONTH) + 1) }
     var selectedDay by remember { mutableStateOf(initialCalendar.get(Calendar.DAY_OF_MONTH)) }
 
+    var remindHour by remember { mutableStateOf(initialCard?.remindHour ?: 9) }
+    var remindMinute by remember { mutableStateOf(initialCard?.remindMinute ?: 0) }
+
     var advanceDays by remember { mutableStateOf(initialCard?.advanceDays ?: 0) }
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
 
-    // 菜单展开控制
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
     var yearExpanded by remember { mutableStateOf(false) }
     var monthExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
+    var hourExpanded by remember { mutableStateOf(false) }
+    var minuteExpanded by remember { mutableStateOf(false) }
     var advanceDropdownExpanded by remember { mutableStateOf(false) }
     var repeatDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -513,7 +538,6 @@ fun CardEditDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initialCard == null) "新增卡片" else "编辑卡片", fontWeight = FontWeight.Bold) },
         text = {
-            // 加入 verticalScroll 保证弹窗内所有字段滑动可见
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -536,7 +560,7 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 1. 卡片分类选择
+                // 1. 分类选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
                     onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
@@ -567,13 +591,12 @@ fun CardEditDialog(
                     }
                 }
 
-                // 2. 年月日自由下拉选择
-                Text("到期日期选择:", fontSize = 14.sp, color = Color.Gray)
+                // 2. 年月日自由选择
+                Text("到期日期设定:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // 年
                     ExposedDropdownMenuBox(
                         expanded = yearExpanded,
                         onExpandedChange = { yearExpanded = !yearExpanded },
@@ -583,20 +606,16 @@ fun CardEditDialog(
                             value = "${selectedYear}年",
                             onValueChange = {},
                             readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = yearExpanded) },
                             modifier = Modifier.menuAnchor()
                         )
                         ExposedDropdownMenu(
                             expanded = yearExpanded,
                             onDismissRequest = { yearExpanded = false }
                         ) {
-                            yearOptions.forEach { y ->
-                                DropdownMenuItem(text = { Text("${y}年") }, onClick = { selectedYear = y; yearExpanded = false })
-                            }
+                            yearOptions.forEach { y -> DropdownMenuItem(text = { Text("${y}年") }, onClick = { selectedYear = y; yearExpanded = false }) }
                         }
                     }
 
-                    // 月
                     ExposedDropdownMenuBox(
                         expanded = monthExpanded,
                         onExpandedChange = { monthExpanded = !monthExpanded },
@@ -606,20 +625,16 @@ fun CardEditDialog(
                             value = "${selectedMonth}月",
                             onValueChange = {},
                             readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthExpanded) },
                             modifier = Modifier.menuAnchor()
                         )
                         ExposedDropdownMenu(
                             expanded = monthExpanded,
                             onDismissRequest = { monthExpanded = false }
                         ) {
-                            monthOptions.forEach { m ->
-                                DropdownMenuItem(text = { Text("${m}月") }, onClick = { selectedMonth = m; monthExpanded = false })
-                            }
+                            monthOptions.forEach { m -> DropdownMenuItem(text = { Text("${m}月") }, onClick = { selectedMonth = m; monthExpanded = false }) }
                         }
                     }
 
-                    // 日
                     ExposedDropdownMenuBox(
                         expanded = dayExpanded,
                         onExpandedChange = { dayExpanded = !dayExpanded },
@@ -629,21 +644,63 @@ fun CardEditDialog(
                             value = "${selectedDay}日",
                             onValueChange = {},
                             readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dayExpanded) },
                             modifier = Modifier.menuAnchor()
                         )
                         ExposedDropdownMenu(
                             expanded = dayExpanded,
                             onDismissRequest = { dayExpanded = false }
                         ) {
-                            dayOptions.forEach { d ->
-                                DropdownMenuItem(text = { Text("${d}日") }, onClick = { selectedDay = d; dayExpanded = false })
-                            }
+                            dayOptions.forEach { d -> DropdownMenuItem(text = { Text("${d}日") }, onClick = { selectedDay = d; dayExpanded = false }) }
                         }
                     }
                 }
 
-                // 3. 提前提醒选择
+                // 3. 自定义闹钟提醒时间 (时、分)
+                Text("自定义闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ExposedDropdownMenuBox(
+                        expanded = hourExpanded,
+                        onExpandedChange = { hourExpanded = !hourExpanded },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = String.format("%02d 时", remindHour),
+                            onValueChange = {},
+                            readOnly = true,
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = hourExpanded,
+                            onDismissRequest = { hourExpanded = false }
+                        ) {
+                            hourOptions.forEach { h -> DropdownMenuItem(text = { Text(String.format("%02d 时", h)) }, onClick = { remindHour = h; hourExpanded = false }) }
+                        }
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = minuteExpanded,
+                        onExpandedChange = { minuteExpanded = !minuteExpanded },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = String.format("%02d 分", remindMinute),
+                            onValueChange = {},
+                            readOnly = true,
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = minuteExpanded,
+                            onDismissRequest = { minuteExpanded = false }
+                        ) {
+                            minuteOptions.forEach { m -> DropdownMenuItem(text = { Text(String.format("%02d 分", m)) }, onClick = { remindMinute = m; minuteExpanded = false }) }
+                        }
+                    }
+                }
+
+                // 4. 提前提醒
                 ExposedDropdownMenuBox(
                     expanded = advanceDropdownExpanded,
                     onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
@@ -674,7 +731,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 4. 提醒模式
+                // 5. 提醒模式
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -735,8 +792,8 @@ fun CardEditDialog(
                         set(Calendar.YEAR, selectedYear)
                         set(Calendar.MONTH, selectedMonth - 1)
                         set(Calendar.DAY_OF_MONTH, selectedDay)
-                        set(Calendar.HOUR_OF_DAY, 9)
-                        set(Calendar.MINUTE, 0)
+                        set(Calendar.HOUR_OF_DAY, remindHour)
+                        set(Calendar.MINUTE, remindMinute)
                         set(Calendar.SECOND, 0)
                     }
 
@@ -746,6 +803,8 @@ fun CardEditDialog(
                         cardNumber = cardNumber,
                         category = selectedCategory,
                         expiryDateMillis = calendar.timeInMillis,
+                        remindHour = remindHour,
+                        remindMinute = remindMinute,
                         advanceDays = advanceDays,
                         isRepeat = isRepeat,
                         repeatDays = repeatDays,
@@ -775,7 +834,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.4", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v1.5", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
