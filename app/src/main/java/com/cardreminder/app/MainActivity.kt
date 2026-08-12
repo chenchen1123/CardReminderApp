@@ -39,13 +39,13 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型 (增加 note 备注字段)
+// 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val cardNumber: String = "",
     val category: String,
-    val note: String = "", // 备注字段
+    val note: String = "",
     val expiryDateMillis: Long,
     val remindHour: Int = 9,
     val remindMinute: Int = 0,
@@ -155,7 +155,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainTabContainer() {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(0) } // 默认显示首页
+    var selectedTab by remember { mutableStateOf(0) }
 
     var cardList by remember { mutableStateOf(CardStorage.loadCards(context)) }
 
@@ -422,7 +422,6 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
                             )
                         }
 
-                        // 横向左右滑动列表
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
@@ -437,7 +436,8 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
     }
 }
 
-// 首页横向滑动的单个卡片样式
+// 首页横向滑动的单个卡片样式（添加注解修复 Warning/Error 报错）
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -500,7 +500,7 @@ fun ListScreen(
     }
 }
 
-// 列表单项卡片 (支持单击展开查看备注)
+// 列表单项卡片
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
@@ -549,7 +549,7 @@ fun SwipeableCardItem(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = { expandedNote = !expandedNote }), // 单击展开/折叠备注
+                .combinedClickable(onClick = { expandedNote = !expandedNote }),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (card.isPinned) Color(0xFFE3F2FD) else Color.White
@@ -594,7 +594,6 @@ fun SwipeableCardItem(
                     Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
                 }
 
-                // 备注展示区域 (点击展开)
                 if (card.note.isNotBlank()) {
                     Spacer(modifier = Modifier.height(6.dp))
                     AnimatedVisibility(visible = expandedNote) {
@@ -657,7 +656,7 @@ fun CardEditDialog(
 
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
-    var note by remember { mutableStateOf(initialCard?.note ?: "") } // 备注状态
+    var note by remember { mutableStateOf(initialCard?.note ?: "") }
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
 
     val initialCalendar = Calendar.getInstance().apply {
@@ -709,7 +708,6 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 备注多行输入框
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -719,7 +717,6 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 1. 分类选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
                     onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
@@ -750,7 +747,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 2. 年月日选择
                 Text("到期日期设定:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -814,7 +810,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 3. 响铃具体时间
                 Text("精确闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -859,7 +854,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 4. 提前提醒
                 ExposedDropdownMenuBox(
                     expanded = advanceDropdownExpanded,
                     onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
@@ -890,7 +884,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 5. 提醒模式
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
