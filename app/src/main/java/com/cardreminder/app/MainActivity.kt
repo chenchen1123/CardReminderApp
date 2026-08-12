@@ -8,11 +8,14 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,12 +39,13 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型
+// 数据模型 (增加 note 备注字段)
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val cardNumber: String = "",
     val category: String,
+    val note: String = "", // 备注字段
     val expiryDateMillis: Long,
     val remindHour: Int = 9,
     val remindMinute: Int = 0,
@@ -52,7 +56,7 @@ data class CardItem(
     val pinTime: Long = 0L
 )
 
-// SharedPreferences 本地持久化工具类，解决退出应用数据消失问题
+// SharedPreferences 数据持久化工具
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -65,6 +69,7 @@ object CardStorage {
                 put("title", card.title)
                 put("cardNumber", card.cardNumber)
                 put("category", card.category)
+                put("note", card.note)
                 put("expiryDateMillis", card.expiryDateMillis)
                 put("remindHour", card.remindHour)
                 put("remindMinute", card.remindMinute)
@@ -94,6 +99,7 @@ object CardStorage {
                         title = obj.optString("title", ""),
                         cardNumber = obj.optString("cardNumber", ""),
                         category = obj.optString("category", "其他"),
+                        note = obj.optString("note", ""),
                         expiryDateMillis = obj.optLong("expiryDateMillis", System.currentTimeMillis()),
                         remindHour = obj.optInt("remindHour", 9),
                         remindMinute = obj.optInt("remindMinute", 0),
@@ -149,9 +155,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainTabContainer() {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(1) }
+    var selectedTab by remember { mutableStateOf(0) } // 默认显示首页
 
-    // 启动时从 SharedPreferences 恢复卡片列表
     var cardList by remember { mutableStateOf(CardStorage.loadCards(context)) }
 
     var selectedCategoryFilter by remember { mutableStateOf("全部") }
@@ -187,7 +192,7 @@ fun MainTabContainer() {
                 title = {
                     Text(
                         when (selectedTab) {
-                            0 -> "首页概览"
+                            0 -> "分类浏览"
                             1 -> "我的卡片"
                             2 -> "添加卡片"
                             else -> "个人中心"
@@ -258,7 +263,7 @@ fun MainTabContainer() {
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
                     icon = { Icon(Icons.Default.CreditCard, contentDescription = "列表") },
-                    label = { Text("卡片") }
+                    label = { Text("列表") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
@@ -280,7 +285,10 @@ fun MainTabContainer() {
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
             when (selectedTab) {
-                0 -> HomeScreen(cardList)
+                0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
+                    editingCard = card
+                    showAddDialog = true
+                })
                 1 -> ListScreen(
                     displayList = displayList,
                     onTogglePin = { card ->
@@ -310,7 +318,7 @@ fun MainTabContainer() {
             onSave = { newCard ->
                 val updatedList = cardList.filter { it.id != newCard.id } + newCard
                 cardList = updatedList
-                CardStorage.saveCards(context, updatedList) // 数据持久化存盘
+                CardStorage.saveCards(context, updatedList)
 
                 try {
                     val reminderCalendar = Calendar.getInstance().apply {
@@ -339,7 +347,7 @@ fun MainTabContainer() {
 
                 showAddDialog = false
                 selectedTab = 1
-                Toast.makeText(context, "卡片已永久保存并设置提醒！", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "卡片已永久保存！", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -356,7 +364,7 @@ fun MainTabContainer() {
                         deletingCard?.let { card ->
                             val newList = cardList.filter { it.id != card.id }
                             cardList = newList
-                            CardStorage.saveCards(context, newList) // 同步删除本地存储
+                            CardStorage.saveCards(context, newList)
                             try {
                                 CardReminder.cancelReminder(context, card.id.hashCode())
                             } catch (e: Exception) { }
@@ -377,36 +385,92 @@ fun MainTabContainer() {
     }
 }
 
+// 1. 首页：按分类分组展示，每类横向滑动
 @Composable
-fun HomeScreen(cardList: List<CardItem>) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
+    val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
+
+    if (cardList.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("暂无卡片数据，点击底部“新增”添加", color = Color.Gray)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("卡片状态统计", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("总卡片数量", color = Color.DarkGray)
-                    Text("${cardList.size} 张", fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("置顶卡片", color = Color.DarkGray)
-                    Text("${cardList.count { it.isPinned }} 张", fontWeight = FontWeight.Bold)
+            items(categories) { category ->
+                val categoryCards = cardList.filter { it.category == category }
+                if (categoryCards.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = category,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "${categoryCards.size}张",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+                        }
+
+                        // 横向左右滑动列表
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(categoryCards) { card ->
+                                HorizontalCardItem(card = card, onClick = { onEdit(card) })
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+// 首页横向滑动的单个卡片样式
+@Composable
+fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    Card(
+        modifier = Modifier
+            .width(220.dp)
+            .height(130.dp)
+            .combinedClickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(card.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                if (card.cardNumber.isNotBlank()) {
+                    Text(card.cardNumber, fontSize = 12.sp, color = Color.DarkGray, maxLines = 1)
+                }
+            }
+            if (card.note.isNotBlank()) {
+                Text("备注: ${card.note}", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+            }
+            Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+// 2. 列表视图
 @Composable
 fun ListScreen(
     displayList: List<CardItem>,
@@ -436,6 +500,7 @@ fun ListScreen(
     }
 }
 
+// 列表单项卡片 (支持单击展开查看备注)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
@@ -444,6 +509,8 @@ fun SwipeableCardItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var expandedNote by remember { mutableStateOf(false) }
+
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.StartToEnd) {
@@ -482,7 +549,7 @@ fun SwipeableCardItem(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = { onEdit() }),
+                .combinedClickable(onClick = { expandedNote = !expandedNote }), // 单击展开/折叠备注
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (card.isPinned) Color(0xFFE3F2FD) else Color.White
@@ -527,6 +594,28 @@ fun SwipeableCardItem(
                     Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
                 }
 
+                // 备注展示区域 (点击展开)
+                if (card.note.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    AnimatedVisibility(visible = expandedNote) {
+                        Surface(
+                            color = Color(0xFFF0F4F8),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "备注: ${card.note}",
+                                fontSize = 13.sp,
+                                color = Color.DarkGray,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                    if (!expandedNote) {
+                        Text("点击卡片查看备注...", fontSize = 11.sp, color = Color.LightGray)
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                 val timeStr = String.format("%02d:%02d", card.remindHour, card.remindMinute)
@@ -546,7 +635,7 @@ fun SwipeableCardItem(
     }
 }
 
-// 对应分钟精确到 0~59 分自由选择的对话框
+// 支持新增备注多行输入的编辑框
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -559,7 +648,7 @@ fun CardEditDialog(
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
 
     val hourOptions = (0..23).toList()
-    val minuteOptions = (0..59).toList() // 精确到 1 分钟颗粒度
+    val minuteOptions = (0..59).toList()
 
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     val yearOptions = (currentYear..currentYear + 10).toList()
@@ -568,6 +657,7 @@ fun CardEditDialog(
 
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
+    var note by remember { mutableStateOf(initialCard?.note ?: "") } // 备注状态
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
 
     val initialCalendar = Calendar.getInstance().apply {
@@ -619,6 +709,16 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // 备注多行输入框
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("备注信息 (选填)") },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 // 1. 分类选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
@@ -650,7 +750,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 2. 年月日自由选择
+                // 2. 年月日选择
                 Text("到期日期设定:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -714,7 +814,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 3. 自定义闹钟提醒时间 (时、精准到 1 分钟)
+                // 3. 响铃具体时间
                 Text("精确闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -861,6 +961,7 @@ fun CardEditDialog(
                         title = title,
                         cardNumber = cardNumber,
                         category = selectedCategory,
+                        note = note,
                         expiryDateMillis = calendar.timeInMillis,
                         remindHour = remindHour,
                         remindMinute = remindMinute,
@@ -893,7 +994,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.6", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v1.7", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
