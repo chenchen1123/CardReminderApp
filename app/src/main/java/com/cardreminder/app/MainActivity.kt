@@ -51,6 +51,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
+// 1. 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -69,6 +70,7 @@ data class CardItem(
     val bgValue: String = "0xFFFFFFFF"
 )
 
+// 2. 持久化存储
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -204,6 +206,18 @@ fun MainTabContainer() {
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
+    // 全局相册图片临时选择状态
+    var pickedImageUriStr by remember { mutableStateOf<String?>(null) }
+
+    // 将相册图片 Launcher 放在页面顶级安全作用域，彻底解决生命周期闪退
+    val photoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            pickedImageUriStr = it.toString()
+        }
+    }
+
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
 
     val displayList = remember(cardList, selectedCategoryFilter, currentSortOrder) {
@@ -307,6 +321,7 @@ fun MainTabContainer() {
                     selected = selectedTab == 2,
                     onClick = {
                         editingCard = null
+                        pickedImageUriStr = null
                         showAddDialog = true
                     },
                     icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
@@ -325,6 +340,7 @@ fun MainTabContainer() {
             when (selectedTab) {
                 0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
                     editingCard = card
+                    pickedImageUriStr = if (card.bgType == "URI") card.bgValue else null
                     showAddDialog = true
                 })
                 1 -> ListScreen(
@@ -338,6 +354,7 @@ fun MainTabContainer() {
                     },
                     onEdit = { card ->
                         editingCard = card
+                        pickedImageUriStr = if (card.bgType == "URI") card.bgValue else null
                         showAddDialog = true
                     },
                     onDeleteRequest = { card ->
@@ -352,6 +369,8 @@ fun MainTabContainer() {
     if (showAddDialog) {
         CardEditDialog(
             initialCard = editingCard,
+            pickedImageUri = pickedImageUriStr,
+            onPickPhotoRequest = { photoLauncher.launch("image/*") },
             onDismiss = { showAddDialog = false },
             onSave = { newCard ->
                 val updatedList = cardList.filter { it.id != newCard.id } + newCard
@@ -565,18 +584,18 @@ fun ListScreen(
 fun SwipeableCardItem(
     card: CardItem,
     onTogglePin: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onEdit: (CardItem) -> Unit,
+    onDelete: (CardItem) -> Unit
 ) {
     var expandedNote by remember { mutableStateOf(false) }
 
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.StartToEnd) {
-                onEdit()
+                onEdit(card)
                 false
             } else if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
+                onDelete(card)
                 false
             } else false
         }
@@ -655,7 +674,7 @@ fun SwipeableCardItem(
                                     tint = if (card.isPinned) MaterialTheme.colorScheme.primary else textColor.copy(alpha = 0.6f)
                                 )
                             }
-                            IconButton(onClick = onDelete) {
+                            IconButton(onClick = { onDelete(card) }) {
                                 Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textColor.copy(alpha = 0.6f))
                             }
                         }
@@ -708,11 +727,13 @@ fun SwipeableCardItem(
     }
 }
 
-// 100% 稳定防闪退对话框：移除 ExposedDropdownMenu，改用原生的 Chips 和极简选择器
+// 稳定无崩弹窗组件：与 Launcher 解耦，通过事件回调调起相册
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CardEditDialog(
     initialCard: CardItem?,
+    pickedImageUri: String?,
+    onPickPhotoRequest: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (CardItem) -> Unit
 ) {
@@ -737,6 +758,14 @@ fun CardEditDialog(
     var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
     var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
 
+    // 当用户在相册选中图片后，实时更新弹窗状态
+    LaunchedEffect(pickedImageUri) {
+        if (!pickedImageUri.isNullBlinking()) {
+            bgType = "URI"
+            bgValue = pickedImageUri
+        }
+    }
+
     val initialCalendar = Calendar.getInstance().apply {
         timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
     }
@@ -750,15 +779,6 @@ fun CardEditDialog(
     var advanceDays by remember { mutableStateOf(initialCard?.advanceDays ?: 0) }
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
-
-    val photoLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            bgType = "URI"
-            bgValue = it.toString()
-        }
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -795,7 +815,7 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 分类 Chip 选择组（彻底避免 Dropdown 闪退）
+                // 1. 分类 ChoiceChip 组
                 Text("卡片分类:", fontSize = 13.sp, color = Color.Gray)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -810,7 +830,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 背景色 Chip
+                // 2. 背景设置
                 Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -837,16 +857,16 @@ fun CardEditDialog(
                     }
 
                     OutlinedButton(
-                        onClick = { photoLauncher.launch("image/*") },
+                        onClick = onPickPhotoRequest,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("相册", fontSize = 12.sp)
+                        Text(if (bgType == "URI") "已选相册" else "相册", fontSize = 12.sp)
                     }
                 }
 
-                // 年月日数字手动调整
+                // 3. 到期时间调节
                 Text("到期日期: ${selectedYear}年 ${selectedMonth}月 ${selectedDay}日", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -867,7 +887,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 闹钟时间调控
+                // 4. 响铃精确时间
                 Text("响铃时刻: ${String.format("%02d:%02d", remindHour, remindMinute)}", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -888,7 +908,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 提前提醒
+                // 5. 提前提醒
                 Text("提前提醒:", fontSize = 13.sp, color = Color.Gray)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -946,6 +966,9 @@ fun CardEditDialog(
     )
 }
 
+// 辅助扩展函数，判断字符串非空
+fun String?.isNullBlinking(): Boolean = this == null || this.isBlank()
+
 @Composable
 fun ProfileScreen() {
     Column(
@@ -957,7 +980,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v2.0", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v2.1", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
