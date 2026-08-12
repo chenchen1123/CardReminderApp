@@ -35,7 +35,7 @@ import java.util.*
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
-    val cardNumber: String = "", // 卡号字段
+    val cardNumber: String = "",
     val category: String,
     val expiryDateMillis: Long,
     val advanceDays: Int = 0,
@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainTabContainer() {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(1) } // 默认显示列表页
+    var selectedTab by remember { mutableStateOf(1) }
 
     var cardList by remember {
         mutableStateOf(
@@ -97,7 +97,7 @@ fun MainTabContainer() {
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
-    var deletingCard by remember { mutableStateOf<CardItem?>(null) } // 删除二次确认对象
+    var deletingCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -232,7 +232,7 @@ fun MainTabContainer() {
                         showAddDialog = true
                     },
                     onDeleteRequest = { card ->
-                        deletingCard = card // 触发表单删除二次确认
+                        deletingCard = card
                     }
                 )
                 3 -> ProfileScreen()
@@ -240,32 +240,34 @@ fun MainTabContainer() {
         }
     }
 
-    // 新增 / 编辑 弹窗
     if (showAddDialog) {
         CardEditDialog(
             initialCard = editingCard,
             onDismiss = { showAddDialog = false },
             onSave = { newCard ->
-                val updatedList = cardList.filter { it.id != newCard.id } + newCard
-                cardList = updatedList
+                try {
+                    val updatedList = cardList.filter { it.id != newCard.id } + newCard
+                    cardList = updatedList
 
-                val triggerTime = newCard.expiryDateMillis - (newCard.advanceDays * 86400000L)
-                CardReminder.setReminder(
-                    context = context,
-                    reminderId = newCard.id.hashCode(),
-                    triggerAtMillis = if (triggerTime > System.currentTimeMillis()) triggerTime else System.currentTimeMillis() + 5000L,
-                    title = "[${newCard.category}] ${newCard.title}",
-                    content = "您的卡片到期提醒到了！"
-                )
+                    val triggerTime = newCard.expiryDateMillis - (newCard.advanceDays * 86400000L)
+                    CardReminder.setReminder(
+                        context = context,
+                        reminderId = newCard.id.hashCode(),
+                        triggerAtMillis = if (triggerTime > System.currentTimeMillis()) triggerTime else System.currentTimeMillis() + 5000L,
+                        title = "[${newCard.category}] ${newCard.title}",
+                        content = "您的卡片到期提醒到了！"
+                    )
 
-                showAddDialog = false
-                selectedTab = 1
-                Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
+                    showAddDialog = false
+                    selectedTab = 1
+                    Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "保存失败，请检查输入", Toast.LENGTH_SHORT).show()
+                }
             }
         )
     }
 
-    // 删除二次确认弹窗
     if (deletingCard != null) {
         AlertDialog(
             onDismissRequest = { deletingCard = null },
@@ -295,7 +297,6 @@ fun MainTabContainer() {
     }
 }
 
-// 首页
 @Composable
 fun HomeScreen(cardList: List<CardItem>) {
     Column(
@@ -326,7 +327,6 @@ fun HomeScreen(cardList: List<CardItem>) {
     }
 }
 
-// 列表视图
 @Composable
 fun ListScreen(
     displayList: List<CardItem>,
@@ -356,7 +356,6 @@ fun ListScreen(
     }
 }
 
-// 可操作卡片项
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
@@ -466,7 +465,7 @@ fun SwipeableCardItem(
     }
 }
 
-// 修复新增/编辑表单 (防止闪退并加入卡号与日期)
+// 防闪退的完全安全对话框
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -477,20 +476,22 @@ fun CardEditDialog(
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
-
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val expiryDaysOptions = listOf(7, 15, 30, 60, 90, 180, 365)
 
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
-    var dateString by remember { mutableStateOf(sdf.format(Date(initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)))) }
     var advanceDays by remember { mutableStateOf(initialCard?.advanceDays ?: 0) }
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
+    
+    // 安全选择到期天数，完全避免手写日期解析崩溃
+    var selectedDaysOffset by remember { mutableStateOf(30) }
 
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
     var advanceDropdownExpanded by remember { mutableStateOf(false) }
     var repeatDropdownExpanded by remember { mutableStateOf(false) }
+    var expiryDropdownExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -516,14 +517,7 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = dateString,
-                    onValueChange = { dateString = it },
-                    label = { Text("到期日期 (格式: YYYY-MM-DD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
+                // 类别选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
                     onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
@@ -554,6 +548,38 @@ fun CardEditDialog(
                     }
                 }
 
+                // 到期时长安全下拉选择
+                ExposedDropdownMenuBox(
+                    expanded = expiryDropdownExpanded,
+                    onExpandedChange = { expiryDropdownExpanded = !expiryDropdownExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = "$selectedDaysOffset 天后到期",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("到期时间设定") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expiryDropdownExpanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expiryDropdownExpanded,
+                        onDismissRequest = { expiryDropdownExpanded = false }
+                    ) {
+                        expiryDaysOptions.forEach { days ->
+                            DropdownMenuItem(
+                                text = { Text("$days 天后到期") },
+                                onClick = {
+                                    selectedDaysOffset = days
+                                    expiryDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // 提前提醒下拉选择
                 ExposedDropdownMenuBox(
                     expanded = advanceDropdownExpanded,
                     onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
@@ -562,7 +588,7 @@ fun CardEditDialog(
                         value = if (advanceDays == 0) "当天提醒" else "提前 $advanceDays 天",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("提前提醒天数") },
+                        label = { Text("提前提醒") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = advanceDropdownExpanded) },
                         modifier = Modifier
                             .menuAnchor()
@@ -639,18 +665,14 @@ fun CardEditDialog(
             Button(
                 onClick = {
                     if (title.isBlank()) return@Button
-                    val parsedDateMillis = try {
-                        sdf.parse(dateString)?.time ?: System.currentTimeMillis()
-                    } catch (e: Exception) {
-                        System.currentTimeMillis()
-                    }
+                    val computedExpiryMillis = System.currentTimeMillis() + (selectedDaysOffset * 86400000L)
 
                     val card = CardItem(
                         id = initialCard?.id ?: UUID.randomUUID().toString(),
                         title = title,
                         cardNumber = cardNumber,
                         category = selectedCategory,
-                        expiryDateMillis = parsedDateMillis,
+                        expiryDateMillis = computedExpiryMillis,
                         advanceDays = advanceDays,
                         isRepeat = isRepeat,
                         repeatDays = repeatDays,
@@ -669,7 +691,6 @@ fun CardEditDialog(
     )
 }
 
-// 我的页面
 @Composable
 fun ProfileScreen() {
     Column(
@@ -681,7 +702,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.2", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v1.3", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
