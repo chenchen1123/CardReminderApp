@@ -1,6 +1,7 @@
 package com.cardreminder.app
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -30,24 +31,86 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型 (增加提醒小时、分钟字段)
+// 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val cardNumber: String = "",
     val category: String,
     val expiryDateMillis: Long,
-    val remindHour: Int = 9,    // 默认上午 9 点提醒
-    val remindMinute: Int = 0,  // 默认 0 分
+    val remindHour: Int = 9,
+    val remindMinute: Int = 0,
     val advanceDays: Int = 0,
     val isRepeat: Boolean = false,
     val repeatDays: Int = 7,
     val isPinned: Boolean = false,
     val pinTime: Long = 0L
 )
+
+// SharedPreferences 本地持久化工具类，解决退出应用数据消失问题
+object CardStorage {
+    private const val PREF_NAME = "card_reminder_prefs"
+    private const val KEY_CARDS = "key_cards_json"
+
+    fun saveCards(context: Context, cards: List<CardItem>) {
+        val jsonArray = JSONArray()
+        cards.forEach { card ->
+            val obj = JSONObject().apply {
+                put("id", card.id)
+                put("title", card.title)
+                put("cardNumber", card.cardNumber)
+                put("category", card.category)
+                put("expiryDateMillis", card.expiryDateMillis)
+                put("remindHour", card.remindHour)
+                put("remindMinute", card.remindMinute)
+                put("advanceDays", card.advanceDays)
+                put("isRepeat", card.isRepeat)
+                put("repeatDays", card.repeatDays)
+                put("isPinned", card.isPinned)
+                put("pinTime", card.pinTime)
+            }
+            jsonArray.put(obj)
+        }
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        sp.edit().putString(KEY_CARDS, jsonArray.toString()).apply()
+    }
+
+    fun loadCards(context: Context): List<CardItem> {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val jsonStr = sp.getString(KEY_CARDS, null) ?: return emptyList()
+        val list = mutableListOf<CardItem>()
+        try {
+            val jsonArray = JSONArray(jsonStr)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                list.add(
+                    CardItem(
+                        id = obj.optString("id", UUID.randomUUID().toString()),
+                        title = obj.optString("title", ""),
+                        cardNumber = obj.optString("cardNumber", ""),
+                        category = obj.optString("category", "其他"),
+                        expiryDateMillis = obj.optLong("expiryDateMillis", System.currentTimeMillis()),
+                        remindHour = obj.optInt("remindHour", 9),
+                        remindMinute = obj.optInt("remindMinute", 0),
+                        advanceDays = obj.optInt("advanceDays", 0),
+                        isRepeat = obj.optBoolean("isRepeat", false),
+                        repeatDays = obj.optInt("repeatDays", 7),
+                        isPinned = obj.optBoolean("isPinned", false),
+                        pinTime = obj.optLong("pinTime", 0L)
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return list
+    }
+}
 
 enum class SortOrder { NONE, EXPIRY_ASC, EXPIRY_DESC }
 
@@ -88,14 +151,8 @@ fun MainTabContainer() {
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(1) }
 
-    var cardList by remember {
-        mutableStateOf(
-            listOf(
-                CardItem("1", "招商银行信用卡", "6222 **** **** 8888", "银行卡", System.currentTimeMillis() + 86400000L * 15, 9, 0, 3, true, 30, true, System.currentTimeMillis()),
-                CardItem("2", "移动手机卡到期", "138 **** 9999", "电话卡", System.currentTimeMillis() + 86400000L * 5, 10, 30, 1, false, 0, false)
-            )
-        )
-    }
+    // 启动时从 SharedPreferences 恢复卡片列表
+    var cardList by remember { mutableStateOf(CardStorage.loadCards(context)) }
 
     var selectedCategoryFilter by remember { mutableStateOf("全部") }
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
@@ -227,9 +284,11 @@ fun MainTabContainer() {
                 1 -> ListScreen(
                     displayList = displayList,
                     onTogglePin = { card ->
-                        cardList = cardList.map {
+                        val newList = cardList.map {
                             if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
                         }
+                        cardList = newList
+                        CardStorage.saveCards(context, newList)
                     },
                     onEdit = { card ->
                         editingCard = card
@@ -249,11 +308,10 @@ fun MainTabContainer() {
             initialCard = editingCard,
             onDismiss = { showAddDialog = false },
             onSave = { newCard ->
-                // 1. 本地更新卡片列表
                 val updatedList = cardList.filter { it.id != newCard.id } + newCard
                 cardList = updatedList
+                CardStorage.saveCards(context, updatedList) // 数据持久化存盘
 
-                // 2. 计算精准闹钟提醒时间 (到期日 - 提前天数，设定小时和分钟)
                 try {
                     val reminderCalendar = Calendar.getInstance().apply {
                         timeInMillis = newCard.expiryDateMillis
@@ -264,7 +322,6 @@ fun MainTabContainer() {
                     }
 
                     var triggerMillis = reminderCalendar.timeInMillis
-                    // 如果计算出的时间早于当前系统时间，设为 5 秒后直接触发作为体验
                     if (triggerMillis <= System.currentTimeMillis()) {
                         triggerMillis = System.currentTimeMillis() + 5000L
                     }
@@ -277,12 +334,12 @@ fun MainTabContainer() {
                         content = "您的卡片到期提醒到了！"
                     )
                 } catch (e: Exception) {
-                    // 安全容错，保证界面保存不受闹钟服务故障影响
+                    e.printStackTrace()
                 }
 
                 showAddDialog = false
                 selectedTab = 1
-                Toast.makeText(context, "卡片已成功保存！", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "卡片已永久保存并设置提醒！", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -297,7 +354,9 @@ fun MainTabContainer() {
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     onClick = {
                         deletingCard?.let { card ->
-                            cardList = cardList.filter { it.id != card.id }
+                            val newList = cardList.filter { it.id != card.id }
+                            cardList = newList
+                            CardStorage.saveCards(context, newList) // 同步删除本地存储
                             try {
                                 CardReminder.cancelReminder(context, card.id.hashCode())
                             } catch (e: Exception) { }
@@ -487,7 +546,7 @@ fun SwipeableCardItem(
     }
 }
 
-// 可滑动的自定义对话框 (含年月日及自定义提醒具体时间)
+// 对应分钟精确到 0~59 分自由选择的对话框
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -500,7 +559,7 @@ fun CardEditDialog(
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
 
     val hourOptions = (0..23).toList()
-    val minuteOptions = listOf(0, 15, 30, 45)
+    val minuteOptions = (0..59).toList() // 精确到 1 分钟颗粒度
 
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     val yearOptions = (currentYear..currentYear + 10).toList()
@@ -655,8 +714,8 @@ fun CardEditDialog(
                     }
                 }
 
-                // 3. 自定义闹钟提醒时间 (时、分)
-                Text("自定义闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
+                // 3. 自定义闹钟提醒时间 (时、精准到 1 分钟)
+                Text("精确闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -834,7 +893,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.5", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v1.6", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
