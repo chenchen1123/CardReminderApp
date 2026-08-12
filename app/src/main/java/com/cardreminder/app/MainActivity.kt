@@ -51,6 +51,22 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
+// 1. 安全颜色解析工具（彻底防御 NumberFormatException 闪退）
+fun parseColorHex(hexString: String): Color {
+    return try {
+        val cleanHex = hexString.removePrefix("0x").removePrefix("#").trim()
+        val longVal = cleanHex.toLong(16)
+        if (cleanHex.length <= 6) {
+            Color(0xFF000000L or longVal)
+        } else {
+            Color(longVal)
+        }
+    } catch (e: Exception) {
+        Color.White
+    }
+}
+
+// 2. 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -69,6 +85,7 @@ data class CardItem(
     val bgValue: String = "0xFFFFFFFF"
 )
 
+// 3. 本地持久化存储
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -495,11 +512,10 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
                         .background(Color.Black.copy(alpha = 0.35f))
                 )
             } else {
-                val colorHex = card.bgValue.toLongOrNull(16) ?: 0xFFFFFFFF
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(colorHex))
+                        .background(parseColorHex(card.bgValue))
                 )
             }
 
@@ -617,8 +633,7 @@ fun SwipeableCardItem(
                     )
                     Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.35f)))
                 } else {
-                    val colorHex = card.bgValue.toLongOrNull(16) ?: 0xFFFFFFFF
-                    Box(modifier = Modifier.matchParentSize().background(Color(colorHex)))
+                    Box(modifier = Modifier.matchParentSize().background(parseColorHex(card.bgValue)))
                 }
 
                 val textColor = if (card.bgType == "URI" || card.bgValue.contains("0xFF1E88E5") || card.bgValue.contains("0xFF26A69A")) Color.White else Color.Black
@@ -703,6 +718,7 @@ fun SwipeableCardItem(
     }
 }
 
+// 修复后的全屏编辑组件（使用 parseColorHex 函数彻底解决颜色解析崩溃）
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardScreen(
@@ -806,7 +822,7 @@ fun EditCardScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             presetColors.forEach { (hex, _) ->
-                val colorVal = Color(hex.toLong(16))
+                val colorVal = parseColorHex(hex)
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -939,7 +955,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v2.2", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v2.3", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
