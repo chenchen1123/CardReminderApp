@@ -30,15 +30,15 @@ import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据结构定义
+// 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
-    val category: String, // 银行卡, 电话卡, 邮箱, 账号, 其他
+    val category: String,
     val expiryDateMillis: Long,
-    val advanceDays: Int = 0, // 提前提醒天数
-    val isRepeat: Boolean = false, // 当天提醒 vs 重复提醒
-    val repeatDays: Int = 7, // 提醒周期(天)
+    val advanceDays: Int = 0,
+    val isRepeat: Boolean = false,
+    val repeatDays: Int = 7,
     val isPinned: Boolean = false,
     val pinTime: Long = 0L
 )
@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                CardReminderAppScreen()
+                MainTabContainer()
             }
         }
     }
@@ -71,11 +71,10 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CardReminderAppScreen() {
+fun MainTabContainer() {
     val context = LocalContext.current
-    val categoryOptions = remember { listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他") }
-    
-    // 状态定义
+    var selectedTab by remember { mutableStateOf(0) } // 0:首页, 1:列表, 2:新增, 3:我的
+
     var cardList by remember {
         mutableStateOf(
             listOf(
@@ -84,14 +83,16 @@ fun CardReminderAppScreen() {
             )
         )
     }
-    
+
     var selectedCategoryFilter by remember { mutableStateOf("全部") }
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
-    // 过滤与排序计算
+    val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
+
+    // 筛选与排序算法
     val displayList = remember(cardList, selectedCategoryFilter, currentSortOrder) {
         cardList.filter { selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter }
             .sortedWith { a, b ->
@@ -112,114 +113,120 @@ fun CardReminderAppScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("卡片提醒助手", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        when (selectedTab) {
+                            0 -> "首页概览"
+                            1 -> "卡片提醒列表"
+                            2 -> "添加卡片"
+                            else -> "个人中心"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 actions = {
-                    IconButton(onClick = { filterMenuExpanded = true }) {
-                        Icon(Icons.Default.FilterList, contentDescription = "筛选排序")
-                    }
-                    
-                    // 顶部筛选与排序下拉菜单
-                    DropdownMenu(
-                        expanded = filterMenuExpanded,
-                        onDismissRequest = { filterMenuExpanded = false }
-                    ) {
-                        Text(" 分类筛选", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
-                        categoryOptions.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { 
-                                    Text(
-                                        cat, 
-                                        color = if (selectedCategoryFilter == cat) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                                        fontWeight = if (selectedCategoryFilter == cat) FontWeight.Bold else FontWeight.Normal
-                                    ) 
-                                },
-                                leadingIcon = {
-                                    if (selectedCategoryFilter == cat) {
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                },
-                                onClick = {
-                                    selectedCategoryFilter = cat
-                                    filterMenuExpanded = false
-                                }
-                            )
+                    if (selectedTab == 1 || selectedTab == 0) {
+                        IconButton(onClick = { filterMenuExpanded = true }) {
+                            Icon(Icons.Default.FilterList, contentDescription = "筛选排序")
                         }
 
-                        HorizontalDivider()
-                        Text(" 到期时间排序", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
-                        
-                        DropdownMenuItem(
-                            text = { 
-                                Text(
-                                    "按到期日期升序",
-                                    color = if (currentSortOrder == SortOrder.EXPIRY_ASC) MaterialTheme.colorScheme.primary else Color.Unspecified
-                                ) 
-                            },
-                            leadingIcon = {
-                                if (currentSortOrder == SortOrder.EXPIRY_ASC) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            },
-                            onClick = {
-                                currentSortOrder = SortOrder.EXPIRY_ASC
-                                filterMenuExpanded = false
+                        DropdownMenu(
+                            expanded = filterMenuExpanded,
+                            onDismissRequest = { filterMenuExpanded = false }
+                        ) {
+                            Text(" 分类筛选", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
+                            categoryOptions.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            cat,
+                                            color = if (selectedCategoryFilter == cat) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                            fontWeight = if (selectedCategoryFilter == cat) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        if (selectedCategoryFilter == cat) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedCategoryFilter = cat
+                                        filterMenuExpanded = false
+                                    }
+                                )
                             }
-                        )
-                        DropdownMenuItem(
-                            text = { 
-                                Text(
-                                    "按到期日期降序",
-                                    color = if (currentSortOrder == SortOrder.EXPIRY_DESC) MaterialTheme.colorScheme.primary else Color.Unspecified
-                                ) 
-                            },
-                            leadingIcon = {
-                                if (currentSortOrder == SortOrder.EXPIRY_DESC) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                }
-                            },
-                            onClick = {
-                                currentSortOrder = SortOrder.EXPIRY_DESC
-                                filterMenuExpanded = false
-                            }
-                        )
+
+                            HorizontalDivider()
+                            Text(" 到期时间排序", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
+
+                            DropdownMenuItem(
+                                text = { Text("按到期日期升序", color = if (currentSortOrder == SortOrder.EXPIRY_ASC) MaterialTheme.colorScheme.primary else Color.Unspecified) },
+                                leadingIcon = { if (currentSortOrder == SortOrder.EXPIRY_ASC) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
+                                onClick = { currentSortOrder = SortOrder.EXPIRY_ASC; filterMenuExpanded = false }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("按到期日期降序", color = if (currentSortOrder == SortOrder.EXPIRY_DESC) MaterialTheme.colorScheme.primary else Color.Unspecified) },
+                                leadingIcon = { if (currentSortOrder == SortOrder.EXPIRY_DESC) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
+                                onClick = { currentSortOrder = SortOrder.EXPIRY_DESC; filterMenuExpanded = false }
+                            )
+                        }
                     }
                 }
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { 
-                editingCard = null
-                showAddDialog = true 
-            }) {
-                Icon(Icons.Default.Add, contentDescription = "新增提醒")
+        bottomBar = {
+            // 恢复底部导航栏
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
+                    label = { Text("首页") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Default.List, contentDescription = "列表") },
+                    label = { Text("列表") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = {
+                        editingCard = null
+                        showAddDialog = true
+                    },
+                    icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
+                    label = { Text("新增") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
+                    label = { Text("我的") }
+                )
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            itemsIndexed(displayList, key = { _, item -> item.id }) { index, card ->
-                SwipeableCardItem(
-                    card = card,
-                    onTogglePin = {
+        Box(modifier = Modifier.padding(padding)) {
+            when (selectedTab) {
+                0 -> HomeScreen(cardList)
+                1 -> ListScreen(
+                    displayList = displayList,
+                    onTogglePin = { card ->
                         cardList = cardList.map {
                             if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
                         }
                     },
-                    onEdit = {
+                    onEdit = { card ->
                         editingCard = card
                         showAddDialog = true
                     },
-                    onDelete = {
+                    onDelete = { card ->
                         cardList = cardList.filter { it.id != card.id }
                         CardReminder.cancelReminder(context, card.id.hashCode())
-                        Toast.makeText(context, "已删除卡片", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "卡片已删除", Toast.LENGTH_SHORT).show()
                     },
-                    onMoveUp = {
+                    onMoveUp = { index ->
                         if (index > 0) {
                             val mutable = cardList.toMutableList()
                             val fromIndex = mutable.indexOf(displayList[index])
@@ -230,7 +237,7 @@ fun CardReminderAppScreen() {
                             }
                         }
                     },
-                    onMoveDown = {
+                    onMoveDown = { index ->
                         if (index < displayList.size - 1) {
                             val mutable = cardList.toMutableList()
                             val fromIndex = mutable.indexOf(displayList[index])
@@ -242,6 +249,7 @@ fun CardReminderAppScreen() {
                         }
                     }
                 )
+                3 -> ProfileScreen()
             }
         }
     }
@@ -254,7 +262,6 @@ fun CardReminderAppScreen() {
                 val updatedList = cardList.filter { it.id != newCard.id } + newCard
                 cardList = updatedList
 
-                // 计算提醒触发时间戳
                 val triggerTime = newCard.expiryDateMillis - (newCard.advanceDays * 86400000L)
                 CardReminder.setReminder(
                     context = context,
@@ -265,13 +272,83 @@ fun CardReminderAppScreen() {
                 )
 
                 showAddDialog = false
-                Toast.makeText(context, "卡片已保存并更新提醒", Toast.LENGTH_SHORT).show()
+                selectedTab = 1 // 保存后跳转至列表页
+                Toast.makeText(context, "卡片保存成功", Toast.LENGTH_SHORT).show()
             }
         )
     }
 }
 
-// 可划动/拖动交互卡片项
+// 1. 首页视图
+@Composable
+fun HomeScreen(cardList: List<CardItem>) {
+    val pinnedCount = cardList.count { it.isPinned }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("提醒汇总概览", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("卡片总数: ${cardList.size} 张", fontSize = 16.sp)
+                Text("置顶卡片: $pinnedCount 张", fontSize = 16.sp)
+            }
+        }
+    }
+}
+
+// 2. 列表视图
+@Composable
+fun ListScreen(
+    displayList: List<CardItem>,
+    onTogglePin: (CardItem) -> Unit,
+    onEdit: (CardItem) -> Unit,
+    onDelete: (CardItem) -> Unit,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        itemsIndexed(displayList, key = { _, item -> item.id }) { index, card ->
+            SwipeableCardItem(
+                card = card,
+                onTogglePin = { onTogglePin(card) },
+                onEdit = { onEdit(card) },
+                onDelete = { onDelete(card) },
+                onMoveUp = { onMoveUp(index) },
+                onMoveDown = { onMoveDown(index) }
+            )
+        }
+    }
+}
+
+// 3. 我的视图
+@Composable
+fun ProfileScreen() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("卡片提醒助手 v1.0", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("本地数据防丢与智能提醒系统", color = Color.Gray, fontSize = 14.sp)
+    }
+}
+
+// 交互卡片与编辑对话框保持不变
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
@@ -298,8 +375,8 @@ fun SwipeableCardItem(
         state = dismissState,
         backgroundContent = {
             val color = when (dismissState.dismissDirection) {
-                SwipeToDismissBoxValue.StartToEnd -> Color(0xFF4CAF50) // 左滑编辑 (绿)
-                SwipeToDismissBoxValue.EndToStart -> Color(0xFFE53935) // 右滑删除 (红)
+                SwipeToDismissBoxValue.StartToEnd -> Color(0xFF4CAF50)
+                SwipeToDismissBoxValue.EndToStart -> Color(0xFFE53935)
                 else -> Color.Transparent
             }
             Box(
@@ -328,7 +405,7 @@ fun SwipeableCardItem(
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = { onEdit() },
-                    onLongClick = { onMoveUp() } // 长按触发排序调整
+                    onLongClick = { onMoveUp() }
                 ),
             colors = CardDefaults.cardColors(
                 containerColor = if (card.isPinned) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface
@@ -362,7 +439,6 @@ fun SwipeableCardItem(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 置顶按钮
                     IconButton(onClick = onTogglePin) {
                         Icon(
                             imageVector = if (card.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
@@ -370,9 +446,8 @@ fun SwipeableCardItem(
                             tint = if (card.isPinned) MaterialTheme.colorScheme.primary else Color.Gray
                         )
                     }
-                    // 排序微调提示按钮
                     IconButton(onClick = onMoveDown) {
-                        Icon(Icons.Default.DragHandle, contentDescription = "长按拖拽", tint = Color.LightGray)
+                        Icon(Icons.Default.DragHandle, contentDescription = "微调", tint = Color.LightGray)
                     }
                 }
             }
@@ -380,7 +455,6 @@ fun SwipeableCardItem(
     }
 }
 
-// 新增 / 编辑 对话框
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -418,7 +492,6 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 1. 分类下拉选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
                     onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
@@ -449,7 +522,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 2. 提前提醒天数下拉
                 ExposedDropdownMenuBox(
                     expanded = advanceDropdownExpanded,
                     onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
@@ -480,7 +552,6 @@ fun CardEditDialog(
                     }
                 }
 
-                // 3. 提醒模式与周期下拉
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
