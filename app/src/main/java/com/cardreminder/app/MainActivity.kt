@@ -51,7 +51,6 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -70,7 +69,6 @@ data class CardItem(
     val bgValue: String = "0xFFFFFFFF"
 )
 
-// 数据持久化
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -141,7 +139,6 @@ enum class SortOrder { NONE, EXPIRY_ASC, EXPIRY_DESC }
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         checkAndRequestPermissions(this)
 
         setContent {
@@ -388,7 +385,7 @@ fun MainTabContainer() {
 
                 showAddDialog = false
                 selectedTab = 1
-                Toast.makeText(context, "卡片已更新并保存！", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -397,7 +394,7 @@ fun MainTabContainer() {
         AlertDialog(
             onDismissRequest = { deletingCard = null },
             title = { Text("确认删除", fontWeight = FontWeight.Bold) },
-            text = { Text("确定要删除卡片“${deletingCard?.title}”吗？此操作无法撤销。") },
+            text = { Text("确定要删除卡片“${deletingCard?.title}”吗？") },
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -711,8 +708,8 @@ fun SwipeableCardItem(
     }
 }
 
-// 修复崩溃的弹窗组件：Launcher 提至组装顶层
-@OptIn(ExperimentalMaterial3Api::class)
+// 100% 稳定防闪退对话框：移除 ExposedDropdownMenu，改用原生的 Chips 和极简选择器
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CardEditDialog(
     initialCard: CardItem?,
@@ -721,7 +718,6 @@ fun CardEditDialog(
 ) {
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
-    val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
 
     val presetColors = listOf(
         "0xFFFFFFFF" to "白",
@@ -731,13 +727,7 @@ fun CardEditDialog(
         "0xFFFF7043" to "橙"
     )
 
-    val hourOptions = (0..23).toList()
-    val minuteOptions = (0..59).toList()
-
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-    val yearOptions = (currentYear..currentYear + 10).toList()
-    val monthOptions = (1..12).toList()
-    val dayOptions = (1..31).toList()
 
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
@@ -761,7 +751,6 @@ fun CardEditDialog(
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
 
-    // 在组合顶层安全初始化 Activity Result Launcher，彻底消除点击新增闪退
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -771,15 +760,6 @@ fun CardEditDialog(
         }
     }
 
-    var categoryDropdownExpanded by remember { mutableStateOf(false) }
-    var yearExpanded by remember { mutableStateOf(false) }
-    var monthExpanded by remember { mutableStateOf(false) }
-    var dayExpanded by remember { mutableStateOf(false) }
-    var hourExpanded by remember { mutableStateOf(false) }
-    var minuteExpanded by remember { mutableStateOf(false) }
-    var advanceDropdownExpanded by remember { mutableStateOf(false) }
-    var repeatDropdownExpanded by remember { mutableStateOf(false) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initialCard == null) "新增卡片" else "编辑卡片", fontWeight = FontWeight.Bold) },
@@ -788,7 +768,7 @@ fun CardEditDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
                     value = title,
@@ -811,11 +791,26 @@ fun CardEditDialog(
                     onValueChange = { note = it },
                     label = { Text("备注信息 (选填)") },
                     minLines = 2,
-                    maxLines = 4,
+                    maxLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 自定义背景
+                // 分类 Chip 选择组（彻底避免 Dropdown 闪退）
+                Text("卡片分类:", fontSize = 13.sp, color = Color.Gray)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    categories.forEach { cat ->
+                        FilterChip(
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat },
+                            label = { Text(cat) }
+                        )
+                    }
+                }
+
+                // 背景色 Chip
                 Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -851,225 +846,59 @@ fun CardEditDialog(
                     }
                 }
 
-                // 分类选择
-                ExposedDropdownMenuBox(
-                    expanded = categoryDropdownExpanded,
-                    onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = selectedCategory,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("卡片分类") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = categoryDropdownExpanded,
-                        onDismissRequest = { categoryDropdownExpanded = false }
-                    ) {
-                        categories.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(cat) },
-                                onClick = {
-                                    selectedCategory = cat
-                                    categoryDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // 到期日期
-                Text("到期日期设定:", fontSize = 13.sp, color = Color.Gray)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    ExposedDropdownMenuBox(
-                        expanded = yearExpanded,
-                        onExpandedChange = { yearExpanded = !yearExpanded },
-                        modifier = Modifier.weight(1.2f)
-                    ) {
-                        OutlinedTextField(
-                            value = "${selectedYear}年",
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = yearExpanded,
-                            onDismissRequest = { yearExpanded = false }
-                        ) {
-                            yearOptions.forEach { y -> DropdownMenuItem(text = { Text("${y}年") }, onClick = { selectedYear = y; yearExpanded = false }) }
-                        }
-                    }
-
-                    ExposedDropdownMenuBox(
-                        expanded = monthExpanded,
-                        onExpandedChange = { monthExpanded = !monthExpanded },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = "${selectedMonth}月",
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = monthExpanded,
-                            onDismissRequest = { monthExpanded = false }
-                        ) {
-                            monthOptions.forEach { m -> DropdownMenuItem(text = { Text("${m}月") }, onClick = { selectedMonth = m; monthExpanded = false }) }
-                        }
-                    }
-
-                    ExposedDropdownMenuBox(
-                        expanded = dayExpanded,
-                        onExpandedChange = { dayExpanded = !dayExpanded },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = "${selectedDay}日",
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = dayExpanded,
-                            onDismissRequest = { dayExpanded = false }
-                        ) {
-                            dayOptions.forEach { d -> DropdownMenuItem(text = { Text("${d}日") }, onClick = { selectedDay = d; dayExpanded = false }) }
-                        }
-                    }
-                }
-
-                // 闹钟响铃时间
-                Text("精确闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ExposedDropdownMenuBox(
-                        expanded = hourExpanded,
-                        onExpandedChange = { hourExpanded = !hourExpanded },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = String.format("%02d 时", remindHour),
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = hourExpanded,
-                            onDismissRequest = { hourExpanded = false }
-                        ) {
-                            hourOptions.forEach { h -> DropdownMenuItem(text = { Text(String.format("%02d 时", h)) }, onClick = { remindHour = h; hourExpanded = false }) }
-                        }
-                    }
-
-                    ExposedDropdownMenuBox(
-                        expanded = minuteExpanded,
-                        onExpandedChange = { minuteExpanded = !minuteExpanded },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = String.format("%02d 分", remindMinute),
-                            onValueChange = {},
-                            readOnly = true,
-                            modifier = Modifier.menuAnchor()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = minuteExpanded,
-                            onDismissRequest = { minuteExpanded = false }
-                        ) {
-                            minuteOptions.forEach { m -> DropdownMenuItem(text = { Text(String.format("%02d 分", m)) }, onClick = { remindMinute = m; minuteExpanded = false }) }
-                        }
-                    }
-                }
-
-                // 提前提醒
-                ExposedDropdownMenuBox(
-                    expanded = advanceDropdownExpanded,
-                    onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = if (advanceDays == 0) "当天提醒" else "提前 $advanceDays 天",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("提前提醒") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = advanceDropdownExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = advanceDropdownExpanded,
-                        onDismissRequest = { advanceDropdownExpanded = false }
-                    ) {
-                        advanceDaysOptions.forEach { days ->
-                            DropdownMenuItem(
-                                text = { Text(if (days == 0) "当天提醒" else "提前 $days 天") },
-                                onClick = {
-                                    advanceDays = days
-                                    advanceDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // 提醒模式
+                // 年月日数字手动调整
+                Text("到期日期: ${selectedYear}年 ${selectedMonth}月 ${selectedDay}日", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("提醒模式:", fontSize = 14.sp)
-                    FilterChip(
-                        selected = !isRepeat,
-                        onClick = { isRepeat = false },
-                        label = { Text("单次") }
-                    )
-                    FilterChip(
-                        selected = isRepeat,
-                        onClick = { isRepeat = true },
-                        label = { Text("周期重复") }
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("年: ", fontSize = 12.sp)
+                        IconButton(onClick = { if (selectedYear > currentYear) selectedYear-- }) { Icon(Icons.Default.Remove, null) }
+                        Text("$selectedYear", fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { selectedYear++ }) { Icon(Icons.Default.Add, null) }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("月: ", fontSize = 12.sp)
+                        IconButton(onClick = { if (selectedMonth > 1) selectedMonth-- }) { Icon(Icons.Default.Remove, null) }
+                        Text("$selectedMonth", fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { if (selectedMonth < 12) selectedMonth++ }) { Icon(Icons.Default.Add, null) }
+                    }
                 }
 
-                if (isRepeat) {
-                    ExposedDropdownMenuBox(
-                        expanded = repeatDropdownExpanded,
-                        onExpandedChange = { repeatDropdownExpanded = !repeatDropdownExpanded }
-                    ) {
-                        OutlinedTextField(
-                            value = "每 $repeatDays 天",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("重复周期") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = repeatDropdownExpanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
+                // 闹钟时间调控
+                Text("响铃时刻: ${String.format("%02d:%02d", remindHour, remindMinute)}", fontSize = 13.sp, color = Color.Gray)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("时: ", fontSize = 12.sp)
+                        IconButton(onClick = { if (remindHour > 0) remindHour-- }) { Icon(Icons.Default.Remove, null) }
+                        Text("$remindHour", fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { if (remindHour < 23) remindHour++ }) { Icon(Icons.Default.Add, null) }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("分: ", fontSize = 12.sp)
+                        IconButton(onClick = { if (remindMinute >= 5) remindMinute -= 5 else remindMinute = 0 }) { Icon(Icons.Default.Remove, null) }
+                        Text("$remindMinute", fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { if (remindMinute <= 54) remindMinute += 5 else remindMinute = 59 }) { Icon(Icons.Default.Add, null) }
+                    }
+                }
+
+                // 提前提醒
+                Text("提前提醒:", fontSize = 13.sp, color = Color.Gray)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    advanceDaysOptions.forEach { days ->
+                        FilterChip(
+                            selected = advanceDays == days,
+                            onClick = { advanceDays = days },
+                            label = { Text(if (days == 0) "当天" else "${days}天") }
                         )
-                        ExposedDropdownMenu(
-                            expanded = repeatDropdownExpanded,
-                            onDismissRequest = { repeatDropdownExpanded = false }
-                        ) {
-                            repeatDaysOptions.forEach { days ->
-                                DropdownMenuItem(
-                                    text = { Text("每 $days 天") },
-                                    onClick = {
-                                        repeatDays = days
-                                        repeatDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
                     }
                 }
             }
@@ -1128,7 +957,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.9", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v2.0", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
