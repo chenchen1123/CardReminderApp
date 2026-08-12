@@ -1,3 +1,4 @@
+
 package com.cardreminder.app
 
 import android.os.Bundle
@@ -5,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,7 +53,7 @@ class MainActivity : ComponentActivity() {
 fun MainContainerScreen() {
     var selectedTab by remember { mutableIntStateOf(0) } // 0: 首页, 1: 列表, 2: 新增, 3: 我的
 
-    // 全局数据源
+    // 状态提升：全局统一数据源
     val cardList = remember {
         mutableStateListOf(
             CardModel(category = "银行卡", name = "招商银行", cardNumber = "6214 **** 8888", balance = "12500.00", expiryDate = "2026-12-31", reminderCycle = "到期前3天"),
@@ -97,7 +99,7 @@ fun MainContainerScreen() {
                 1 -> ListScreen(cardList)
                 2 -> AddScreen(onSave = { newCard ->
                     cardList.add(newCard)
-                    selectedTab = 1 // 保存后自动跳到列表页
+                    selectedTab = 1
                 })
                 3 -> ProfileScreen()
             }
@@ -105,7 +107,7 @@ fun MainContainerScreen() {
     }
 }
 
-// 1. 首页 (卡片按类型汇总 + 横向滑动)
+// 1. 首页 (同步展示最新的 cardList)
 @Composable
 fun HomeScreen(cardList: List<CardModel>) {
     val groupedCards = cardList.groupBy { it.category }
@@ -142,7 +144,7 @@ fun HomeScreen(cardList: List<CardModel>) {
                         Spacer(modifier = Modifier.height(12.dp))
 
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(cards) { card ->
+                            items(cards, key = { it.id }) { card ->
                                 Card(
                                     shape = RoundedCornerShape(12.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -170,8 +172,8 @@ fun HomeScreen(cardList: List<CardModel>) {
     }
 }
 
-// 2. 列表页 (筛选/排序/长按编辑)
-@OptIn(ExperimentalFoundationApi::class)
+// 2. 列表页 (支持左滑/右滑删除卡片，自动全局同步)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ListScreen(cardList: MutableList<CardModel>) {
     val context = LocalContext.current
@@ -216,24 +218,61 @@ fun ListScreen(cardList: MutableList<CardModel>) {
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(displayedCards, key = { it.id }) { card ->
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .combinedClickable(
-                            onClick = { Toast.makeText(context, "长按卡片可修改信息", Toast.LENGTH_SHORT).show() },
-                            onLongClick = { editingCard = card }
-                        )
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(card.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            AssistChip(onClick = {}, label = { Text(card.category) })
+                // 配置滑动状态
+                val dismissState = rememberSwipeToDismissBoxState(
+                    confirmValueChange = { dismissValue ->
+                        if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
+                            cardList.remove(card) // 从全局列表彻底移除卡片
+                            Toast.makeText(context, "已删除卡片: ${card.name}", Toast.LENGTH_SHORT).show()
+                            true
+                        } else {
+                            false
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("卡号: ${card.cardNumber}", fontSize = 14.sp)
-                        Text("到期日: ${card.expiryDate}", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
-                        Text("余额: ¥${card.balance}  |  提醒: ${card.reminderCycle}", fontSize = 12.sp, color = Color.Gray)
+                    }
+                )
+
+                SwipeToDismissBox(
+                    state = dismissState,
+                    backgroundContent = {
+                        val alignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                            Alignment.CenterStart
+                        } else {
+                            Alignment.CenterEnd
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFE53935), shape = RoundedCornerShape(12.dp))
+                                .padding(horizontal = 20.dp),
+                            contentAlignment = alignment
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Delete, contentDescription = "删除", tint = Color.White)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("删除", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                ) {
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = { Toast.makeText(context, "左右滑动可删除，长按可修改", Toast.LENGTH_SHORT).show() },
+                                onLongClick = { editingCard = card }
+                            )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(card.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                AssistChip(onClick = {}, label = { Text(card.category) })
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("卡号: ${card.cardNumber}", fontSize = 14.sp)
+                            Text("到期日: ${card.expiryDate}", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                            Text("余额: ¥${card.balance}  |  提醒: ${card.reminderCycle}", fontSize = 12.sp, color = Color.Gray)
+                        }
                     }
                 }
             }
@@ -325,7 +364,7 @@ fun AddScreen(onSave: (CardModel) -> Unit) {
     }
 }
 
-// 4. 我的页面 (个人信息与导出)
+// 4. 我的页面
 @Composable
 fun ProfileScreen() {
     val context = LocalContext.current
