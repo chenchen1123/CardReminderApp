@@ -18,8 +18,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -51,7 +51,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 数据模型 (加入 bgType 背景类型 与 bgValue 自定义背景值)
+// 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -66,8 +66,8 @@ data class CardItem(
     val repeatDays: Int = 7,
     val isPinned: Boolean = false,
     val pinTime: Long = 0L,
-    val bgType: String = "COLOR", // COLOR: 纯色/内置Preset, URI: 相册图片
-    val bgValue: String = "0xFFFFFFFF" // 颜色的 HEX 值或相册图片的 Uri 字符串
+    val bgType: String = "COLOR",
+    val bgValue: String = "0xFFFFFFFF"
 )
 
 // 数据持久化
@@ -142,7 +142,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 检查并申请通知权限与精准闹钟权限（解决闹钟不提醒）
         checkAndRequestPermissions(this)
 
         setContent {
@@ -160,26 +159,34 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndRequestPermissions(context: Context) {
+        val permissions = mutableListOf<String>()
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    101
-                )
-            }
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 
-        // Android 12+ 精准闹钟权限引导，解决闹钟不发提醒的问题
+        val neededPermissions = permissions.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (neededPermissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, neededPermissions.toTypedArray(), 101)
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             if (!alarmManager.canScheduleExactAlarms()) {
-                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                    data = Uri.parse("package:${context.packageName}")
+                try {
+                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-                context.startActivity(intent)
             }
         }
     }
@@ -419,7 +426,6 @@ fun MainTabContainer() {
     }
 }
 
-// 首页：分组展现
 @Composable
 fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -470,7 +476,6 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
     }
 }
 
-// 首页横向卡片，支持自定义背景与相册图片展示
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
@@ -485,7 +490,6 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // 背景处理
             if (card.bgType == "URI") {
                 AsyncImage(
                     model = card.bgValue,
@@ -493,11 +497,10 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                // 半透明黑色遮罩，保证文字清晰
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.3f))
+                        .background(Color.Black.copy(alpha = 0.35f))
                 )
             } else {
                 val colorHex = card.bgValue.toLongOrNull(16) ?: 0xFFFFFFFF
@@ -560,7 +563,6 @@ fun ListScreen(
     }
 }
 
-// 列表单项卡片，完美支持内置纯色与相册图片自定义背景
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
@@ -709,7 +711,7 @@ fun SwipeableCardItem(
     }
 }
 
-// 可选的编辑对话框：包含自定义纯色背景选择与手机相册图片选择
+// 修复崩溃的弹窗组件：Launcher 提至组装顶层
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -721,13 +723,12 @@ fun CardEditDialog(
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
 
-    // 内置经典纯色预设
     val presetColors = listOf(
-        "0xFFFFFFFF" to "经典白",
-        "0xFFE3F2FD" to "淡蓝",
-        "0xFF1E88E5" to "极光蓝",
-        "0xFF26A69A" to "森林绿",
-        "0xFFFF7043" to "日落橙"
+        "0xFFFFFFFF" to "白",
+        "0xFFE3F2FD" to "蓝",
+        "0xFF1E88E5" to "深蓝",
+        "0xFF26A69A" to "绿",
+        "0xFFFF7043" to "橙"
     )
 
     val hourOptions = (0..23).toList()
@@ -760,7 +761,7 @@ fun CardEditDialog(
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
 
-    // 相册图片选择器
+    // 在组合顶层安全初始化 Activity Result Launcher，彻底消除点击新增闪退
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -814,19 +815,18 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 1. 卡片自定义背景设置
-                Text("自定义卡片背景风格:", fontSize = 13.sp, color = Color.Gray)
+                // 自定义背景
+                Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 内置纯色预设选项
-                    presetColors.forEach { (hex, name) ->
+                    presetColors.forEach { (hex, _) ->
                         val colorVal = Color(hex.toLong(16))
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(30.dp)
                                 .clip(CircleShape)
                                 .background(colorVal)
                                 .border(
@@ -841,7 +841,6 @@ fun CardEditDialog(
                         )
                     }
 
-                    // 自定义相册图片按钮
                     OutlinedButton(
                         onClick = { photoLauncher.launch("image/*") },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
@@ -852,7 +851,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 2. 分类选择
+                // 分类选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
                     onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
@@ -883,7 +882,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 3. 到期日期
+                // 到期日期
                 Text("到期日期设定:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -947,7 +946,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 4. 响铃精确时间
+                // 闹钟响铃时间
                 Text("精确闹钟响铃时间:", fontSize = 13.sp, color = Color.Gray)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -992,7 +991,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 5. 提前提醒
+                // 提前提醒
                 ExposedDropdownMenuBox(
                     expanded = advanceDropdownExpanded,
                     onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
@@ -1023,7 +1022,7 @@ fun CardEditDialog(
                     }
                 }
 
-                // 6. 提醒模式
+                // 提醒模式
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1129,7 +1128,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.8", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v1.9", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
