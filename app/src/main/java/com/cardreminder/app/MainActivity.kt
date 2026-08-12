@@ -51,7 +51,6 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 1. 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -70,7 +69,6 @@ data class CardItem(
     val bgValue: String = "0xFFFFFFFF"
 )
 
-// 2. 本地持久化存储
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -420,7 +418,6 @@ fun MainTabContainer() {
     }
 }
 
-// 首页分类视图
 @Composable
 fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -706,7 +703,6 @@ fun SwipeableCardItem(
     }
 }
 
-// 彻底解决跨 Window 闪退的【原生成员全屏编辑页面】
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardScreen(
