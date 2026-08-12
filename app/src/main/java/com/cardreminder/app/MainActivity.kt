@@ -13,7 +13,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.PushPin
@@ -262,7 +264,7 @@ fun MainTabContainer() {
                     selectedTab = 1
                     Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    Toast.makeText(context, "保存失败，请检查输入", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "保存失败，请重试", Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -465,7 +467,7 @@ fun SwipeableCardItem(
     }
 }
 
-// 防闪退的完全安全对话框
+// 支持自由滑动、年月日下拉自由选择的对话框
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CardEditDialog(
@@ -476,29 +478,46 @@ fun CardEditDialog(
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
     val repeatDaysOptions = listOf(1, 3, 7, 14, 30, 90, 180, 365)
-    val expiryDaysOptions = listOf(7, 15, 30, 60, 90, 180, 365)
 
+    // 日期下拉数据源
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    val yearOptions = (currentYear..currentYear + 10).toList()
+    val monthOptions = (1..12).toList()
+    val dayOptions = (1..31).toList()
+
+    // 状态定义
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
+
+    val initialCalendar = Calendar.getInstance().apply {
+        timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
+    }
+    var selectedYear by remember { mutableStateOf(initialCalendar.get(Calendar.YEAR)) }
+    var selectedMonth by remember { mutableStateOf(initialCalendar.get(Calendar.MONTH) + 1) }
+    var selectedDay by remember { mutableStateOf(initialCalendar.get(Calendar.DAY_OF_MONTH)) }
+
     var advanceDays by remember { mutableStateOf(initialCard?.advanceDays ?: 0) }
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
-    
-    // 安全选择到期天数，完全避免手写日期解析崩溃
-    var selectedDaysOffset by remember { mutableStateOf(30) }
 
+    // 菜单展开控制
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var yearExpanded by remember { mutableStateOf(false) }
+    var monthExpanded by remember { mutableStateOf(false) }
+    var dayExpanded by remember { mutableStateOf(false) }
     var advanceDropdownExpanded by remember { mutableStateOf(false) }
     var repeatDropdownExpanded by remember { mutableStateOf(false) }
-    var expiryDropdownExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initialCard == null) "新增卡片" else "编辑卡片", fontWeight = FontWeight.Bold) },
         text = {
+            // 加入 verticalScroll 保证弹窗内所有字段滑动可见
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedTextField(
@@ -517,7 +536,7 @@ fun CardEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 类别选择
+                // 1. 卡片分类选择
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
                     onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
@@ -548,38 +567,83 @@ fun CardEditDialog(
                     }
                 }
 
-                // 到期时长安全下拉选择
-                ExposedDropdownMenuBox(
-                    expanded = expiryDropdownExpanded,
-                    onExpandedChange = { expiryDropdownExpanded = !expiryDropdownExpanded }
+                // 2. 年月日自由下拉选择
+                Text("到期日期选择:", fontSize = 14.sp, color = Color.Gray)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    OutlinedTextField(
-                        value = "$selectedDaysOffset 天后到期",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("到期时间设定") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expiryDropdownExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expiryDropdownExpanded,
-                        onDismissRequest = { expiryDropdownExpanded = false }
+                    // 年
+                    ExposedDropdownMenuBox(
+                        expanded = yearExpanded,
+                        onExpandedChange = { yearExpanded = !yearExpanded },
+                        modifier = Modifier.weight(1.2f)
                     ) {
-                        expiryDaysOptions.forEach { days ->
-                            DropdownMenuItem(
-                                text = { Text("$days 天后到期") },
-                                onClick = {
-                                    selectedDaysOffset = days
-                                    expiryDropdownExpanded = false
-                                }
-                            )
+                        OutlinedTextField(
+                            value = "${selectedYear}年",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = yearExpanded) },
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = yearExpanded,
+                            onDismissRequest = { yearExpanded = false }
+                        ) {
+                            yearOptions.forEach { y ->
+                                DropdownMenuItem(text = { Text("${y}年") }, onClick = { selectedYear = y; yearExpanded = false })
+                            }
+                        }
+                    }
+
+                    // 月
+                    ExposedDropdownMenuBox(
+                        expanded = monthExpanded,
+                        onExpandedChange = { monthExpanded = !monthExpanded },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = "${selectedMonth}月",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthExpanded) },
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = monthExpanded,
+                            onDismissRequest = { monthExpanded = false }
+                        ) {
+                            monthOptions.forEach { m ->
+                                DropdownMenuItem(text = { Text("${m}月") }, onClick = { selectedMonth = m; monthExpanded = false })
+                            }
+                        }
+                    }
+
+                    // 日
+                    ExposedDropdownMenuBox(
+                        expanded = dayExpanded,
+                        onExpandedChange = { dayExpanded = !dayExpanded },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = "${selectedDay}日",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dayExpanded) },
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = dayExpanded,
+                            onDismissRequest = { dayExpanded = false }
+                        ) {
+                            dayOptions.forEach { d ->
+                                DropdownMenuItem(text = { Text("${d}日") }, onClick = { selectedDay = d; dayExpanded = false })
+                            }
                         }
                     }
                 }
 
-                // 提前提醒下拉选择
+                // 3. 提前提醒选择
                 ExposedDropdownMenuBox(
                     expanded = advanceDropdownExpanded,
                     onExpandedChange = { advanceDropdownExpanded = !advanceDropdownExpanded }
@@ -610,6 +674,7 @@ fun CardEditDialog(
                     }
                 }
 
+                // 4. 提醒模式
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -665,14 +730,22 @@ fun CardEditDialog(
             Button(
                 onClick = {
                     if (title.isBlank()) return@Button
-                    val computedExpiryMillis = System.currentTimeMillis() + (selectedDaysOffset * 86400000L)
+
+                    val calendar = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, selectedYear)
+                        set(Calendar.MONTH, selectedMonth - 1)
+                        set(Calendar.DAY_OF_MONTH, selectedDay)
+                        set(Calendar.HOUR_OF_DAY, 9)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                    }
 
                     val card = CardItem(
                         id = initialCard?.id ?: UUID.randomUUID().toString(),
                         title = title,
                         cardNumber = cardNumber,
                         category = selectedCategory,
-                        expiryDateMillis = computedExpiryMillis,
+                        expiryDateMillis = calendar.timeInMillis,
                         advanceDays = advanceDays,
                         isRepeat = isRepeat,
                         repeatDays = repeatDays,
@@ -702,7 +775,7 @@ fun ProfileScreen() {
     ) {
         Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v1.3", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("卡片提醒助手 v1.4", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
     }
 }
