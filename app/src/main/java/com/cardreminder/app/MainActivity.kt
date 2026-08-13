@@ -60,7 +60,6 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 软件主题枚举
 enum class AppTheme(val displayName: String, val isDynamic: Boolean) {
     DEFAULT("默认明亮", false),
     DARK("深色夜间", false),
@@ -68,7 +67,6 @@ enum class AppTheme(val displayName: String, val isDynamic: Boolean) {
     DYNAMIC_GRADIENT("动态炫彩", true)
 }
 
-// 安全解析 Hex 颜色
 fun parseColorHex(hexString: String): Color {
     return try {
         val cleanHex = hexString.removePrefix("0x").removePrefix("#").trim()
@@ -83,7 +81,6 @@ fun parseColorHex(hexString: String): Color {
     }
 }
 
-// 保存相册图片至内部存储
 fun saveImageToInternalStorage(context: Context, uri: Uri): String {
     return try {
         val inputStream = context.contentResolver.openInputStream(uri) ?: return uri.toString()
@@ -199,10 +196,7 @@ enum class SortOrder { NONE, EXPIRY_ASC, EXPIRY_DESC }
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // 开启边缘穿透全屏渲染（解决顶部状态栏留白未应用主题问题）
         enableEdgeToEdge()
-        
         checkAndRequestPermissions(this)
 
         setContent {
@@ -257,7 +251,7 @@ fun MainTabContainer() {
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
-    var pinDialogCard by remember { mutableStateOf<CardItem?>(null) } // 长按置顶弹窗卡片
+    var pinDialogCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -507,7 +501,6 @@ fun MainTabContainer() {
         }
     }
 
-    // 长按选择置顶弹窗
     if (pinDialogCard != null) {
         val isPinned = pinDialogCard?.isPinned == true
         AlertDialog(
@@ -710,7 +703,6 @@ fun ListScreen(
     }
 }
 
-// 增加长按置顶手势的列表项
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
@@ -762,7 +754,7 @@ fun SwipeableCardItem(
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = { expandedNote = !expandedNote },
-                    onLongClick = { onLongClickPin() } // 支持长按弹出置顶对话框
+                    onLongClick = { onLongClickPin() }
                 ),
             shape = RoundedCornerShape(12.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -1122,15 +1114,27 @@ fun ProfileScreen(
     ) {
         Spacer(modifier = Modifier.height(20.dp))
         
-        Image(
-            painter = painterResource(id = R.drawable.app_icon),
-            contentDescription = "应用卡片封面",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape)
-                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-        )
+        // 渲染 drawable 下的 app_icon 图标，防错兼容
+        val context = LocalContext.current
+        val iconResId = context.resources.getIdentifier("app_icon", "drawable", context.packageName)
+        if (iconResId != 0) {
+            Image(
+                painter = painterResource(id = iconResId),
+                contentDescription = "应用卡片封面",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+            )
+        } else {
+            Icon(
+                Icons.Default.AccountCircle,
+                contentDescription = null,
+                modifier = Modifier.size(100.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("卡片提醒助手 v2.5", fontWeight = FontWeight.Bold, fontSize = 20.sp)
