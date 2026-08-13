@@ -6,7 +6,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// 自动生成递增的时间戳版本号 (格式: 20260813)
 val timeVersionCode = SimpleDateFormat("yyyyMMdd").format(Date()).toInt()
 val timeVersionName = "2.6.${SimpleDateFormat("MMddHH").format(Date())}"
 
@@ -20,6 +19,18 @@ android {
         targetSdk = 34
         versionCode = timeVersionCode
         versionName = timeVersionName
+    }
+
+    // 强行指定 debug 和 release 均使用统一的默认调试签名，彻底消除 GitHub 构建签名冲突
+    buildTypes {
+        getByName("debug") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     buildFeatures {
