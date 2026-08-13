@@ -1114,7 +1114,6 @@ fun ProfileScreen(
     ) {
         Spacer(modifier = Modifier.height(20.dp))
         
-        // 渲染 drawable 下的 app_icon 图标，防错兼容
         val context = LocalContext.current
         val iconResId = context.resources.getIdentifier("app_icon", "drawable", context.packageName)
         if (iconResId != 0) {
