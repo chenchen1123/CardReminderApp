@@ -11,44 +11,39 @@ import androidx.core.app.NotificationCompat
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val title = intent.getStringExtra("EXTRA_TITLE") ?: "卡片提醒"
-        val content = intent.getStringExtra("EXTRA_CONTENT") ?: "您有一条待处理的卡片到期提醒！"
-        val reminderId = intent.getIntExtra("EXTRA_REMINDER_ID", 0)
+        val title = intent.getStringExtra("EXTRA_TITLE") ?: "卡片到期提醒"
+        val content = intent.getStringExtra("EXTRA_CONTENT") ?: "您有一张卡片即将到期，请及时处理！"
+        val reminderId = intent.getIntExtra("EXTRA_REMINDER_ID", (System.currentTimeMillis() % 10000).toInt())
 
-        val channelId = "card_reminder_channel_v2"
-        val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channelId = "card_alarm_channel_v3"
 
-        // 默认系统闹钟提示音与震动
-        val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        // 绑定系统默认闹钟铃声
+        val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
+        // 适配 Android 8.0+ 高优先级横幅响铃渠道
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "卡片强响铃提醒通知",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "用于卡片到期高优先响铃提醒"
+            val channel = NotificationChannel(channelId, "卡片强提醒响铃", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "卡片到期强响铃提醒通知"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 200, 500)
-                setSound(alarmSound, null)
+                setSound(alarmUri, null)
             }
             notificationManager.createNotificationChannel(channel)
         }
 
-        // 使用 Android 系统内置通知图标，完全避免 R.mipmap 缺失引用的编译错误
-        val notification = NotificationCompat.Builder(context, channelId)
+        // 构建强提醒横幅通知 (锁屏+响铃+悬浮)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(content)
-            .setSound(alarmSound)
-            .setVibrate(longArrayOf(0, 500, 200, 500))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setSound(alarmUri)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
             .setAutoCancel(true)
-            .build()
 
-        notificationManager.notify(reminderId, notification)
+        notificationManager.notify(reminderId, builder.build())
     }
 }
