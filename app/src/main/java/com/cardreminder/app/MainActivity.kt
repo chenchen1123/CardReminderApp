@@ -16,6 +16,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -39,6 +40,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -51,8 +54,18 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+
+// 软件主题枚举
+enum class AppTheme(val displayName: String, val isDynamic: Boolean) {
+    DEFAULT("默认明亮", false),
+    DARK("深色夜间", false),
+    OCEAN("静谧海洋", false),
+    DYNAMIC_GRADIENT("动态炫彩", true)
+}
 
 // 安全解析 Hex 颜色
 fun parseColorHex(hexString: String): Color {
@@ -66,6 +79,22 @@ fun parseColorHex(hexString: String): Color {
         }
     } catch (e: Exception) {
         Color.White
+    }
+}
+
+// 将相册图片安全的复制保存到应用私有目录，彻底解决 Uri 重启失效问题
+fun saveImageToInternalStorage(context: Context, uri: Uri): String {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return uri.toString()
+        val fileName = "card_bg_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}.jpg"
+        val file = File(context.filesDir, fileName)
+        FileOutputStream(file).use { outputStream ->
+            inputStream.copyTo(outputStream)
+        }
+        file.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        uri.toString()
     }
 }
 
@@ -90,6 +119,7 @@ data class CardItem(
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
+    private const val KEY_THEME = "key_app_theme"
 
     fun saveCards(context: Context, cards: List<CardItem>) {
         val jsonArray = JSONArray()
@@ -150,6 +180,17 @@ object CardStorage {
         }
         return list
     }
+
+    fun saveTheme(context: Context, theme: AppTheme) {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        sp.edit().putString(KEY_THEME, theme.name).apply()
+    }
+
+    fun loadTheme(context: Context): AppTheme {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val name = sp.getString(KEY_THEME, AppTheme.DEFAULT.name)
+        return try { AppTheme.valueOf(name!!) } catch (e: Exception) { AppTheme.DEFAULT }
+    }
 }
 
 enum class SortOrder { NONE, EXPIRY_ASC, EXPIRY_DESC }
@@ -160,16 +201,7 @@ class MainActivity : ComponentActivity() {
         checkAndRequestPermissions(this)
 
         setContent {
-            MaterialTheme(
-                colorScheme = lightColorScheme(
-                    primary = Color(0xFF1E88E5),
-                    secondary = Color(0xFF26A69A),
-                    background = Color(0xFFF5F7FA),
-                    surface = Color.White
-                )
-            ) {
-                MainTabContainer()
-            }
+            MainTabContainer()
         }
     }
 
@@ -214,6 +246,7 @@ fun MainTabContainer() {
     var selectedTab by remember { mutableStateOf(0) }
 
     var cardList by remember { mutableStateOf(CardStorage.loadCards(context)) }
+    var currentTheme by remember { mutableStateOf(CardStorage.loadTheme(context)) }
 
     var selectedCategoryFilter by remember { mutableStateOf("全部") }
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
@@ -240,165 +273,229 @@ fun MainTabContainer() {
             }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        when (selectedTab) {
-                            0 -> "分类浏览"
-                            1 -> "我的卡片"
-                            2 -> if (editingCard == null) "新增卡片" else "编辑卡片"
-                            else -> "个人中心"
-                        },
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    )
-                },
-                actions = {
-                    if (selectedTab == 1 || selectedTab == 0) {
-                        IconButton(onClick = { filterMenuExpanded = true }) {
-                            Icon(Icons.Default.FilterList, contentDescription = "筛选排序")
-                        }
+    // 动态主题渐变逻辑
+    val infiniteTransition = rememberInfiniteTransition(label = "theme_gradient")
+    val animatedOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1200f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "offset"
+    )
 
-                        DropdownMenu(
-                            expanded = filterMenuExpanded,
-                            onDismissRequest = { filterMenuExpanded = false }
-                        ) {
-                            Text(" 分类筛选", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
-                            categoryOptions.forEach { cat ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            cat,
-                                            color = if (selectedCategoryFilter == cat) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                                            fontWeight = if (selectedCategoryFilter == cat) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (selectedCategoryFilter == cat) {
-                                            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+    val dynamicBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFFE0F7FA),
+            Color(0xFFE8EAF6),
+            Color(0xFFF3E5F5),
+            Color(0xFFE1F5FE)
+        ),
+        start = Offset(animatedOffset, 0f),
+        end = Offset(0f, animatedOffset)
+    )
+
+    // 根据选择的主题配置全局配色
+    val colorScheme = when (currentTheme) {
+        AppTheme.DARK -> darkColorScheme(
+            background = Color(0xFF121212),
+            surface = Color(0xFF1E1E1E)
+        )
+        AppTheme.OCEAN -> lightColorScheme(
+            primary = Color(0xFF006699),
+            background = Color(0xFFEBF3F5),
+            surface = Color.White
+        )
+        else -> lightColorScheme(
+            primary = Color(0xFF1E88E5),
+            secondary = Color(0xFF26A69A),
+            background = Color(0xFFF5F7FA),
+            surface = Color.White
+        )
+    }
+
+    MaterialTheme(colorScheme = colorScheme) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = if (currentTheme == AppTheme.DARK) Color(0xFF1E1E1E) else Color.White.copy(alpha = 0.85f)
+                    ),
+                    title = {
+                        Text(
+                            when (selectedTab) {
+                                0 -> "分类浏览"
+                                1 -> "我的卡片"
+                                2 -> if (editingCard == null) "新增卡片" else "编辑卡片"
+                                else -> "个人中心"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+                    },
+                    actions = {
+                        if (selectedTab == 1 || selectedTab == 0) {
+                            IconButton(onClick = { filterMenuExpanded = true }) {
+                                Icon(Icons.Default.FilterList, contentDescription = "筛选排序")
+                            }
+
+                            DropdownMenu(
+                                expanded = filterMenuExpanded,
+                                onDismissRequest = { filterMenuExpanded = false }
+                            ) {
+                                Text(" 分类筛选", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
+                                categoryOptions.forEach { cat ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                cat,
+                                                color = if (selectedCategoryFilter == cat) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                                fontWeight = if (selectedCategoryFilter == cat) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            if (selectedCategoryFilter == cat) {
+                                                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedCategoryFilter = cat
+                                            filterMenuExpanded = false
                                         }
-                                    },
-                                    onClick = {
-                                        selectedCategoryFilter = cat
-                                        filterMenuExpanded = false
-                                    }
+                                    )
+                                }
+
+                                HorizontalDivider()
+                                Text(" 到期时间排序", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
+
+                                DropdownMenuItem(
+                                    text = { Text("按到期日期升序", color = if (currentSortOrder == SortOrder.EXPIRY_ASC) MaterialTheme.colorScheme.primary else Color.Unspecified) },
+                                    leadingIcon = { if (currentSortOrder == SortOrder.EXPIRY_ASC) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { currentSortOrder = SortOrder.EXPIRY_ASC; filterMenuExpanded = false }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("按到期日期降序", color = if (currentSortOrder == SortOrder.EXPIRY_DESC) MaterialTheme.colorScheme.primary else Color.Unspecified) },
+                                    leadingIcon = { if (currentSortOrder == SortOrder.EXPIRY_DESC) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { currentSortOrder = SortOrder.EXPIRY_DESC; filterMenuExpanded = false }
                                 )
                             }
-
-                            HorizontalDivider()
-                            Text(" 到期时间排序", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
-
-                            DropdownMenuItem(
-                                text = { Text("按到期日期升序", color = if (currentSortOrder == SortOrder.EXPIRY_ASC) MaterialTheme.colorScheme.primary else Color.Unspecified) },
-                                leadingIcon = { if (currentSortOrder == SortOrder.EXPIRY_ASC) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
-                                onClick = { currentSortOrder = SortOrder.EXPIRY_ASC; filterMenuExpanded = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("按到期日期降序", color = if (currentSortOrder == SortOrder.EXPIRY_DESC) MaterialTheme.colorScheme.primary else Color.Unspecified) },
-                                leadingIcon = { if (currentSortOrder == SortOrder.EXPIRY_DESC) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
-                                onClick = { currentSortOrder = SortOrder.EXPIRY_DESC; filterMenuExpanded = false }
-                            )
                         }
                     }
+                )
+            },
+            bottomBar = {
+                NavigationBar(
+                    containerColor = if (currentTheme == AppTheme.DARK) Color(0xFF1E1E1E) else Color.White,
+                    tonalElevation = 8.dp
+                ) {
+                    NavigationBarItem(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
+                        label = { Text("首页") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        icon = { Icon(Icons.Default.CreditCard, contentDescription = "列表") },
+                        label = { Text("列表") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 2,
+                        onClick = {
+                            editingCard = null
+                            selectedTab = 2
+                        },
+                        icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
+                        label = { Text("新增") }
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3 },
+                        icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
+                        label = { Text("我的") }
+                    )
                 }
-            )
-        },
-        bottomBar = {
-            NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
-                    label = { Text("首页") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Default.CreditCard, contentDescription = "列表") },
-                    label = { Text("列表") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = {
-                        editingCard = null
-                        selectedTab = 2
-                    },
-                    icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
-                    label = { Text("新增") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
-                    label = { Text("我的") }
-                )
             }
-        }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
-            when (selectedTab) {
-                0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
-                    editingCard = card
-                    selectedTab = 2
-                })
-                1 -> ListScreen(
-                    displayList = displayList,
-                    onTogglePin = { card ->
-                        val newList = cardList.map {
-                            if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
-                        }
-                        cardList = newList
-                        CardStorage.saveCards(context, newList)
-                    },
-                    onEdit = { card ->
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (currentTheme.isDynamic) Modifier.background(dynamicBrush)
+                        else Modifier.background(MaterialTheme.colorScheme.background)
+                    )
+                    .padding(padding)
+            ) {
+                when (selectedTab) {
+                    0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
                         editingCard = card
                         selectedTab = 2
-                    },
-                    onDeleteRequest = { card ->
-                        deletingCard = card
-                    }
-                )
-                2 -> EditCardScreen(
-                    initialCard = editingCard,
-                    onSave = { newCard ->
-                        val updatedList = cardList.filter { it.id != newCard.id } + newCard
-                        cardList = updatedList
-                        CardStorage.saveCards(context, updatedList)
-
-                        try {
-                            val reminderCalendar = Calendar.getInstance().apply {
-                                timeInMillis = newCard.expiryDateMillis
-                                add(Calendar.DAY_OF_MONTH, -newCard.advanceDays)
-                                set(Calendar.HOUR_OF_DAY, newCard.remindHour)
-                                set(Calendar.MINUTE, newCard.remindMinute)
-                                set(Calendar.SECOND, 0)
+                    })
+                    1 -> ListScreen(
+                        displayList = displayList,
+                        onTogglePin = { card ->
+                            val newList = cardList.map {
+                                if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
                             }
-
-                            var triggerMillis = reminderCalendar.timeInMillis
-                            if (triggerMillis <= System.currentTimeMillis()) {
-                                triggerMillis = System.currentTimeMillis() + 5000L
-                            }
-
-                            CardReminder.setReminder(
-                                context = context,
-                                reminderId = newCard.id.hashCode(),
-                                triggerAtMillis = triggerMillis,
-                                title = "[${newCard.category}] ${newCard.title}",
-                                content = "您的卡片到期提醒到了！"
-                            )
-                        } catch (e: Exception) {
-                            e.printStackTrace()
+                            cardList = newList
+                            CardStorage.saveCards(context, newList)
+                        },
+                        onEdit = { card ->
+                            editingCard = card
+                            selectedTab = 2
+                        },
+                        onDeleteRequest = { card ->
+                            deletingCard = card
                         }
+                    )
+                    2 -> EditCardScreen(
+                        initialCard = editingCard,
+                        onSave = { newCard ->
+                            val updatedList = cardList.filter { it.id != newCard.id } + newCard
+                            cardList = updatedList
+                            CardStorage.saveCards(context, updatedList)
 
-                        editingCard = null
-                        selectedTab = 1
-                        Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
-                    }
-                )
-                3 -> ProfileScreen()
+                            try {
+                                val reminderCalendar = Calendar.getInstance().apply {
+                                    timeInMillis = newCard.expiryDateMillis
+                                    add(Calendar.DAY_OF_MONTH, -newCard.advanceDays)
+                                    set(Calendar.HOUR_OF_DAY, newCard.remindHour)
+                                    set(Calendar.MINUTE, newCard.remindMinute)
+                                    set(Calendar.SECOND, 0)
+                                }
+
+                                var triggerMillis = reminderCalendar.timeInMillis
+                                if (triggerMillis <= System.currentTimeMillis()) {
+                                    triggerMillis = System.currentTimeMillis() + 5000L
+                                }
+
+                                CardReminder.setReminder(
+                                    context = context,
+                                    reminderId = newCard.id.hashCode(),
+                                    triggerAtMillis = triggerMillis,
+                                    title = "[${newCard.category}] ${newCard.title}",
+                                    content = "您的卡片到期提醒到了！"
+                                )
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+
+                            editingCard = null
+                            selectedTab = 1
+                            Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    3 -> ProfileScreen(
+                        currentTheme = currentTheme,
+                        onThemeChanged = { newTheme ->
+                            currentTheme = newTheme
+                            CardStorage.saveTheme(context, newTheme)
+                        }
+                    )
+                }
             }
         }
     }
@@ -719,7 +816,6 @@ fun SwipeableCardItem(
     }
 }
 
-// 可靠的原生日历选择组件与全屏编辑界面
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardScreen(
@@ -763,16 +859,17 @@ fun EditCardScreen(
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
 
+    // 选择相册图片并即时保存到内部私有目录，确保永久生效
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
+            val savedPath = saveImageToInternalStorage(context, it)
             bgType = "URI"
-            bgValue = it.toString()
+            bgValue = savedPath
         }
     }
 
-    // 调用 Android 系统原生日历选择器
     val datePickerDialog = remember {
         DatePickerDialog(
             context,
@@ -864,11 +961,10 @@ fun EditCardScreen(
             ) {
                 Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(if (bgType == "URI") "已选相册" else "选择相册", fontSize = 12.sp)
+                Text(if (bgType == "URI") "已选相册图片" else "选择相册", fontSize = 12.sp)
             }
         }
 
-        // 到期日期可视化选择器
         Text("到期日期:", fontSize = 13.sp, color = Color.Gray)
         OutlinedCard(
             onClick = { datePickerDialog.show() },
@@ -965,16 +1061,23 @@ fun EditCardScreen(
     }
 }
 
-// “我的”页面应用卡片封面图片
+// “我的”模块：集成卡片头像与全软件多主题选择
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(
+    currentTheme: AppTheme,
+    onThemeChanged: (AppTheme) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        Spacer(modifier = Modifier.height(20.dp))
+        
         Image(
             painter = painterResource(id = R.drawable.app_icon),
             contentDescription = "应用卡片封面",
@@ -984,8 +1087,47 @@ fun ProfileScreen() {
                 .clip(CircleShape)
                 .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("卡片提醒助手 v2.3", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("卡片提醒助手 v2.4", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
+        }
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("软件外观主题设置", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("选择属于您的背景风格 (含流畅动态渐变)", fontSize = 12.sp, color = Color.Gray)
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    AppTheme.values().forEach { theme ->
+                        FilterChip(
+                            selected = currentTheme == theme,
+                            onClick = { onThemeChanged(theme) },
+                            label = { 
+                                Text(
+                                    if (theme.isDynamic) "${theme.displayName} ✨" else theme.displayName 
+                                ) 
+                            },
+                            leadingIcon = {
+                                if (currentTheme == theme) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
