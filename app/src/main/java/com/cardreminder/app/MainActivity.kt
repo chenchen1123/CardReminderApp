@@ -1,7 +1,6 @@
 package com.cardreminder.app
 
 import android.Manifest
-import android.app.AlarmManager
 import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -9,7 +8,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -224,20 +222,6 @@ class MainActivity : ComponentActivity() {
         if (neededPermissions.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, neededPermissions.toTypedArray(), 101)
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            if (!alarmManager.canScheduleExactAlarms()) {
-                try {
-                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                        data = Uri.parse("package:${context.packageName}")
-                    }
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
     }
 }
 
@@ -258,6 +242,37 @@ fun MainTabContainer() {
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
+
+    // 检查并处理过期卡片的自动周期续期（针对重复卡片）
+    LaunchedEffect(Unit) {
+        val now = System.currentTimeMillis()
+        var updated = false
+        val newList = cardList.map { card ->
+            if (card.isRepeat && card.expiryDateMillis < now) {
+                updated = true
+                val addMillis = card.repeatDays * 24 * 60 * 60 * 1000L
+                val nextExpiry = card.expiryDateMillis + addMillis
+                
+                // 自动为下一个周期重新生成系统闹钟
+                CardReminder.setSystemAlarm(
+                    context = context,
+                    expiryDateMillis = nextExpiry,
+                    remindHour = card.remindHour,
+                    remindMinute = card.remindMinute,
+                    title = card.title,
+                    advanceDays = card.advanceDays
+                )
+                
+                card.copy(expiryDateMillis = nextExpiry)
+            } else {
+                card
+            }
+        }
+        if (updated) {
+            cardList = newList
+            CardStorage.saveCards(context, newList)
+        }
+    }
 
     val displayList = remember(cardList, selectedCategoryFilter, currentSortOrder) {
         cardList.filter { selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter }
@@ -462,34 +477,19 @@ fun MainTabContainer() {
                             cardList = updatedList
                             CardStorage.saveCards(context, updatedList)
 
-                            try {
-                                val reminderCalendar = Calendar.getInstance().apply {
-                                    timeInMillis = newCard.expiryDateMillis
-                                    add(Calendar.DAY_OF_MONTH, -newCard.advanceDays)
-                                    set(Calendar.HOUR_OF_DAY, newCard.remindHour)
-                                    set(Calendar.MINUTE, newCard.remindMinute)
-                                    set(Calendar.SECOND, 0)
-                                }
-
-                                var triggerMillis = reminderCalendar.timeInMillis
-                                if (triggerMillis <= System.currentTimeMillis()) {
-                                    triggerMillis = System.currentTimeMillis() + 5000L
-                                }
-
-                                CardReminder.setReminder(
-                                    context = context,
-                                    reminderId = newCard.id.hashCode(),
-                                    triggerAtMillis = triggerMillis,
-                                    title = "[${newCard.category}] ${newCard.title}",
-                                    content = "您的卡片到期提醒到了！"
-                                )
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
+                            // 调起系统原生闹钟生成精确响铃提醒
+                            CardReminder.setSystemAlarm(
+                                context = context,
+                                expiryDateMillis = newCard.expiryDateMillis,
+                                remindHour = newCard.remindHour,
+                                remindMinute = newCard.remindMinute,
+                                title = "[${newCard.category}] ${newCard.title}",
+                                advanceDays = newCard.advanceDays
+                            )
 
                             editingCard = null
                             selectedTab = 1
-                            Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "卡片已保存并同步至系统闹钟！", Toast.LENGTH_SHORT).show()
                         }
                     )
                     3 -> ProfileScreen(
@@ -548,9 +548,6 @@ fun MainTabContainer() {
                             val newList = cardList.filter { it.id != card.id }
                             cardList = newList
                             CardStorage.saveCards(context, newList)
-                            try {
-                                CardReminder.cancelReminder(context, card.id.hashCode())
-                            } catch (e: Exception) { }
                             Toast.makeText(context, "已被删除", Toast.LENGTH_SHORT).show()
                         }
                         deletingCard = null
@@ -857,7 +854,6 @@ fun SwipeableCardItem(
     }
 }
 
-// 可上下滑动顺畅选择滚轮时间组件 (1分钟间隔)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WheelTimePicker(
@@ -1188,7 +1184,7 @@ fun EditCardScreen(
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("保存卡片信息", fontSize = 16.sp)
+            Text("保存卡片并同步系统闹钟", fontSize = 16.sp)
         }
     }
 }
@@ -1231,7 +1227,7 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v2.6", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("卡片提醒助手 v2.7", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
         }
 
