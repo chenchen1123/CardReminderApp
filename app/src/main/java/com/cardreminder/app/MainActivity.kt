@@ -866,7 +866,7 @@ fun WheelTimePicker(
     onTimeSelected: (hour: Int, minute: Int) -> Unit
 ) {
     val hours = (0..23).toList()
-    val minutes = (0..59).toList() // 1分钟颗粒度
+    val minutes = (0..59).toList()
 
     val hourListState = rememberLazyListState(initialFirstVisibleItemIndex = initialHour)
     val minuteListState = rememberLazyListState(initialFirstVisibleItemIndex = initialMinute)
@@ -894,7 +894,6 @@ fun WheelTimePicker(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 小时滚轮
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -927,7 +926,6 @@ fun WheelTimePicker(
 
             Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
-            // 分钟滚轮 (1分钟间隔)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1131,7 +1129,6 @@ fun EditCardScreen(
             }
         }
 
-        // 上下滑动滚动选择响铃时间（1分钟颗粒度）
         Text("响铃时刻 (上下滑动选择):", fontSize = 13.sp, color = Color.Gray)
         WheelTimePicker(
             initialHour = remindHour,
