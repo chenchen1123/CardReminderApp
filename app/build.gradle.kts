@@ -1,7 +1,14 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// 自动生成递增的时间戳版本号 (格式: 20260813)
+val timeVersionCode = SimpleDateFormat("yyyyMMdd").format(Date()).toInt()
+val timeVersionName = "2.6.${SimpleDateFormat("MMddHH").format(Date())}"
 
 android {
     namespace = "com.cardreminder.app"
@@ -11,8 +18,8 @@ android {
         applicationId = "com.cardreminder.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = timeVersionCode
+        versionName = timeVersionName
     }
 
     buildFeatures {
@@ -44,6 +51,5 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // 异步加载相册图片依赖
     implementation("io.coil-kt:coil-compose:2.6.0")
 }
