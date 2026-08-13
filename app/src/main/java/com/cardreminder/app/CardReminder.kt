@@ -1,83 +1,58 @@
 package com.cardreminder.app
 
-import android.annotation.SuppressLint
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.provider.AlarmClock
+import android.widget.Toast
+import java.util.*
 
 object CardReminder {
 
-    @SuppressLint("ScheduleExactAlarm")
-    fun setReminder(
+    /**
+     * 调用 Android 原生系统闹钟 App 生成对应的强响铃闹钟
+     */
+    fun setSystemAlarm(
         context: Context,
-        reminderId: Int,
-        triggerAtMillis: Long,
+        expiryDateMillis: Long,
+        remindHour: Int,
+        remindMinute: Int,
         title: String,
-        content: String
+        advanceDays: Int = 0
     ) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
-            putExtra("EXTRA_TITLE", title)
-            putExtra("EXTRA_CONTENT", content)
-            putExtra("EXTRA_REMINDER_ID", reminderId)
-        }
-
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            reminderId,
-            intent,
-            flags
-        )
-
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
-            } else {
-                alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
+            // 计算具体的提醒日期 (扣除提前提醒的天数)
+            val reminderCalendar = Calendar.getInstance().apply {
+                timeInMillis = expiryDateMillis
+                add(Calendar.DAY_OF_MONTH, -advanceDays)
+                set(Calendar.HOUR_OF_DAY, remindHour)
+                set(Calendar.MINUTE, remindMinute)
+                set(Calendar.SECOND, 0)
             }
+
+            // 如果设置的到期提醒时间比当前早，自动顺延到明天或提示
+            val now = Calendar.getInstance()
+            if (reminderCalendar.before(now)) {
+                reminderCalendar.timeInMillis = now.timeInMillis + 60000L // 默认设为 1 分钟后
+            }
+
+            val hour = reminderCalendar.get(Calendar.HOUR_OF_DAY)
+            val minute = reminderCalendar.get(Calendar.MINUTE)
+
+            // 调起系统闹钟 Intent
+            val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(AlarmClock.EXTRA_HOUR, hour)
+                putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                putExtra(AlarmClock.EXTRA_MESSAGE, "【卡片到期提醒】$title")
+                putExtra(AlarmClock.EXTRA_SKIP_UI, false) // 设为 false 让用户在系统闹钟里看到并确认
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            context.startActivity(intent)
+            Toast.makeText(context, "正在为您调起系统闹钟，请确认生成！", Toast.LENGTH_LONG).show()
+
         } catch (e: Exception) {
             e.printStackTrace()
-        }
-    }
-
-    fun cancelReminder(context: Context, reminderId: Int) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(context, AlarmReceiver::class.java)
-
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        } else {
-            PendingIntent.FLAG_NO_CREATE
-        }
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            reminderId,
-            intent,
-            flags
-        )
-
-        if (pendingIntent != null) {
-            alarmManager.cancel(pendingIntent)
-            pendingIntent.cancel()
+            Toast.makeText(context, "未找到系统闹钟应用，请检查设置！", Toast.LENGTH_SHORT).show()
         }
     }
 }
