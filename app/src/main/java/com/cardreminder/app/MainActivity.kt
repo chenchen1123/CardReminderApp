@@ -2,6 +2,7 @@ package com.cardreminder.app
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -16,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +54,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
-// 1. 安全颜色解析工具（彻底防御 NumberFormatException 闪退）
+// 安全解析 Hex 颜色
 fun parseColorHex(hexString: String): Color {
     return try {
         val cleanHex = hexString.removePrefix("0x").removePrefix("#").trim()
@@ -66,7 +69,6 @@ fun parseColorHex(hexString: String): Color {
     }
 }
 
-// 2. 数据模型
 data class CardItem(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
@@ -85,7 +87,6 @@ data class CardItem(
     val bgValue: String = "0xFFFFFFFF"
 )
 
-// 3. 本地持久化存储
 object CardStorage {
     private const val PREF_NAME = "card_reminder_prefs"
     private const val KEY_CARDS = "key_cards_json"
@@ -718,13 +719,14 @@ fun SwipeableCardItem(
     }
 }
 
-// 修复后的全屏编辑组件（使用 parseColorHex 函数彻底解决颜色解析崩溃）
+// 可靠的原生日历选择组件与全屏编辑界面
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardScreen(
     initialCard: CardItem?,
     onSave: (CardItem) -> Unit
 ) {
+    val context = LocalContext.current
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
     val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
 
@@ -736,8 +738,6 @@ fun EditCardScreen(
         "0xFFFF7043" to "橙"
     )
 
-    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var note by remember { mutableStateOf(initialCard?.note ?: "") }
@@ -746,12 +746,15 @@ fun EditCardScreen(
     var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
     var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
 
-    val initialCalendar = Calendar.getInstance().apply {
-        timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
+    val calendar = remember {
+        Calendar.getInstance().apply {
+            timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
+        }
     }
-    var selectedYear by remember { mutableStateOf(initialCalendar.get(Calendar.YEAR)) }
-    var selectedMonth by remember { mutableStateOf(initialCalendar.get(Calendar.MONTH) + 1) }
-    var selectedDay by remember { mutableStateOf(initialCalendar.get(Calendar.DAY_OF_MONTH)) }
+
+    var selectedYear by remember { mutableStateOf(calendar.get(Calendar.YEAR)) }
+    var selectedMonth by remember { mutableStateOf(calendar.get(Calendar.MONTH) + 1) }
+    var selectedDay by remember { mutableStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
 
     var remindHour by remember { mutableStateOf(initialCard?.remindHour ?: 9) }
     var remindMinute by remember { mutableStateOf(initialCard?.remindMinute ?: 0) }
@@ -767,6 +770,21 @@ fun EditCardScreen(
             bgType = "URI"
             bgValue = it.toString()
         }
+    }
+
+    // 调用 Android 系统原生日历选择器
+    val datePickerDialog = remember {
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                selectedYear = year
+                selectedMonth = month + 1
+                selectedDay = dayOfMonth
+            },
+            selectedYear,
+            selectedMonth - 1,
+            selectedDay
+        )
     }
 
     Column(
@@ -850,23 +868,26 @@ fun EditCardScreen(
             }
         }
 
-        Text("到期日期: ${selectedYear}年 ${selectedMonth}月 ${selectedDay}日", fontSize = 13.sp, color = Color.Gray)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // 到期日期可视化选择器
+        Text("到期日期:", fontSize = 13.sp, color = Color.Gray)
+        OutlinedCard(
+            onClick = { datePickerDialog.show() },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("年: ", fontSize = 12.sp)
-                IconButton(onClick = { if (selectedYear > currentYear) selectedYear-- }) { Icon(Icons.Default.Remove, null) }
-                Text("$selectedYear", fontWeight = FontWeight.Bold)
-                IconButton(onClick = { selectedYear++ }) { Icon(Icons.Default.Add, null) }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("月: ", fontSize = 12.sp)
-                IconButton(onClick = { if (selectedMonth > 1) selectedMonth-- }) { Icon(Icons.Default.Remove, null) }
-                Text("$selectedMonth", fontWeight = FontWeight.Bold)
-                IconButton(onClick = { if (selectedMonth < 12) selectedMonth++ }) { Icon(Icons.Default.Add, null) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${selectedYear} 年 ${selectedMonth} 月 ${selectedDay} 日",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(Icons.Default.CalendarToday, contentDescription = "选择日期")
             }
         }
 
@@ -909,7 +930,7 @@ fun EditCardScreen(
             onClick = {
                 if (title.isBlank()) return@Button
 
-                val calendar = Calendar.getInstance().apply {
+                val saveCalendar = Calendar.getInstance().apply {
                     set(Calendar.YEAR, selectedYear)
                     set(Calendar.MONTH, selectedMonth - 1)
                     set(Calendar.DAY_OF_MONTH, selectedDay)
@@ -924,7 +945,7 @@ fun EditCardScreen(
                     cardNumber = cardNumber,
                     category = selectedCategory,
                     note = note,
-                    expiryDateMillis = calendar.timeInMillis,
+                    expiryDateMillis = saveCalendar.timeInMillis,
                     remindHour = remindHour,
                     remindMinute = remindMinute,
                     advanceDays = advanceDays,
@@ -944,6 +965,7 @@ fun EditCardScreen(
     }
 }
 
+// “我的”页面应用卡片封面图片
 @Composable
 fun ProfileScreen() {
     Column(
@@ -953,7 +975,15 @@ fun ProfileScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
+        Image(
+            painter = painterResource(id = R.drawable.app_icon),
+            contentDescription = "应用卡片封面",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+        )
         Spacer(modifier = Modifier.height(16.dp))
         Text("卡片提醒助手 v2.3", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
