@@ -14,6 +14,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
@@ -82,7 +83,7 @@ fun parseColorHex(hexString: String): Color {
     }
 }
 
-// 将相册图片安全的复制保存到应用私有目录，彻底解决 Uri 重启失效问题
+// 保存相册图片至内部存储
 fun saveImageToInternalStorage(context: Context, uri: Uri): String {
     return try {
         val inputStream = context.contentResolver.openInputStream(uri) ?: return uri.toString()
@@ -198,6 +199,10 @@ enum class SortOrder { NONE, EXPIRY_ASC, EXPIRY_DESC }
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 开启边缘穿透全屏渲染（解决顶部状态栏留白未应用主题问题）
+        enableEdgeToEdge()
+        
         checkAndRequestPermissions(this)
 
         setContent {
@@ -252,6 +257,7 @@ fun MainTabContainer() {
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
+    var pinDialogCard by remember { mutableStateOf<CardItem?>(null) } // 长按置顶弹窗卡片
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -273,7 +279,6 @@ fun MainTabContainer() {
             }
     }
 
-    // 动态主题渐变逻辑
     val infiniteTransition = rememberInfiniteTransition(label = "theme_gradient")
     val animatedOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -296,7 +301,6 @@ fun MainTabContainer() {
         end = Offset(0f, animatedOffset)
     )
 
-    // 根据选择的主题配置全局配色
     val colorScheme = when (currentTheme) {
         AppTheme.DARK -> darkColorScheme(
             background = Color(0xFF121212),
@@ -443,6 +447,9 @@ fun MainTabContainer() {
                             cardList = newList
                             CardStorage.saveCards(context, newList)
                         },
+                        onLongClickPin = { card ->
+                            pinDialogCard = card
+                        },
                         onEdit = { card ->
                             editingCard = card
                             selectedTab = 2
@@ -498,6 +505,38 @@ fun MainTabContainer() {
                 }
             }
         }
+    }
+
+    // 长按选择置顶弹窗
+    if (pinDialogCard != null) {
+        val isPinned = pinDialogCard?.isPinned == true
+        AlertDialog(
+            onDismissRequest = { pinDialogCard = null },
+            title = { Text("卡片置顶设置", fontWeight = FontWeight.Bold) },
+            text = { Text("是否将卡片“${pinDialogCard?.title}”${if (isPinned) "取消置顶" else "设为置顶"}？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pinDialogCard?.let { card ->
+                            val newList = cardList.map {
+                                if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
+                            }
+                            cardList = newList
+                            CardStorage.saveCards(context, newList)
+                            Toast.makeText(context, if (!isPinned) "已置顶" else "已取消置顶", Toast.LENGTH_SHORT).show()
+                        }
+                        pinDialogCard = null
+                    }
+                ) {
+                    Text(if (isPinned) "取消置顶" else "确认置顶")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pinDialogCard = null }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 
     if (deletingCard != null) {
@@ -644,6 +683,7 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
 fun ListScreen(
     displayList: List<CardItem>,
     onTogglePin: (CardItem) -> Unit,
+    onLongClickPin: (CardItem) -> Unit,
     onEdit: (CardItem) -> Unit,
     onDeleteRequest: (CardItem) -> Unit
 ) {
@@ -661,6 +701,7 @@ fun ListScreen(
                 SwipeableCardItem(
                     card = card,
                     onTogglePin = { onTogglePin(card) },
+                    onLongClickPin = { onLongClickPin(card) },
                     onEdit = { onEdit(card) },
                     onDelete = { onDeleteRequest(card) }
                 )
@@ -669,11 +710,13 @@ fun ListScreen(
     }
 }
 
+// 增加长按置顶手势的列表项
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SwipeableCardItem(
     card: CardItem,
     onTogglePin: () -> Unit,
+    onLongClickPin: () -> Unit,
     onEdit: (CardItem) -> Unit,
     onDelete: (CardItem) -> Unit
 ) {
@@ -717,7 +760,10 @@ fun SwipeableCardItem(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = { expandedNote = !expandedNote }),
+                .combinedClickable(
+                    onClick = { expandedNote = !expandedNote },
+                    onLongClick = { onLongClickPin() } // 支持长按弹出置顶对话框
+                ),
             shape = RoundedCornerShape(12.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -791,7 +837,7 @@ fun SwipeableCardItem(
                             }
                         }
                         if (!expandedNote) {
-                            Text("点击卡片查看备注...", fontSize = 11.sp, color = textColor.copy(alpha = 0.6f))
+                            Text("点击查看备注 (长按可置顶)...", fontSize = 11.sp, color = textColor.copy(alpha = 0.6f))
                         }
                     }
 
@@ -859,7 +905,6 @@ fun EditCardScreen(
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
     var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
 
-    // 选择相册图片并即时保存到内部私有目录，确保永久生效
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -1061,7 +1106,6 @@ fun EditCardScreen(
     }
 }
 
-// “我的”模块：集成卡片头像与全软件多主题选择
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileScreen(
@@ -1089,7 +1133,7 @@ fun ProfileScreen(
         )
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v2.4", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("卡片提醒助手 v2.5", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
         }
 
@@ -1129,86 +1173,5 @@ fun ProfileScreen(
                 }
             }
         }
-    }
-}
-package com.cardreminder.app
-
-import android.app.AlarmManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.provider.Settings
-
-object ReminderManager {
-
-    /**
-     * 设置精确闹钟提醒
-     * @param context 上下文
-     * @param reminderId 提醒唯一ID，用于区分不同闹钟
-     * @param triggerTimeMs 触发时间(毫秒，System.currentTimeMillis() + 延迟毫秒)
-     * @param title 通知标题
-     * @param content 通知内容
-     */
-    fun setAlarm(
-        context: Context,
-        reminderId: Int,
-        triggerTimeMs: Long,
-        title: String,
-        content: String
-    ) {
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
-            action = "com.cardreminder.app.ALARM_TRIGGER"
-            putExtra("EXTRA_TITLE", title)
-            putExtra("EXTRA_CONTENT", content)
-            putExtra("EXTRA_REMINDER_ID", reminderId)
-        }
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            reminderId,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-        )
-
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerTimeMs,
-                    pendingIntent
-                )
-            } else {
-                // 跳转系统设置，让用户授予【精确闹钟】权限
-                val settingIntent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                settingIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                context.startActivity(settingIntent)
-            }
-        } else {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerTimeMs,
-                pendingIntent
-            )
-        }
-    }
-
-    /**
-     * 取消闹钟
-     */
-    fun cancelAlarm(context: Context, reminderId: Int) {
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
-            action = "com.cardreminder.app.ALARM_TRIGGER"
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            reminderId,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-        )
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.cancel(pendingIntent)
     }
 }
