@@ -24,11 +24,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +50,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -854,6 +857,110 @@ fun SwipeableCardItem(
     }
 }
 
+// 可上下滑动顺畅选择滚轮时间组件 (1分钟间隔)
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun WheelTimePicker(
+    initialHour: Int,
+    initialMinute: Int,
+    onTimeSelected: (hour: Int, minute: Int) -> Unit
+) {
+    val hours = (0..23).toList()
+    val minutes = (0..59).toList() // 1分钟颗粒度
+
+    val hourListState = rememberLazyListState(initialFirstVisibleItemIndex = initialHour)
+    val minuteListState = rememberLazyListState(initialFirstVisibleItemIndex = initialMinute)
+
+    val hourFling = rememberSnapFlingBehavior(lazyListState = hourListState)
+    val minuteFling = rememberSnapFlingBehavior(lazyListState = minuteListState)
+
+    LaunchedEffect(hourListState.firstVisibleItemIndex, minuteListState.firstVisibleItemIndex) {
+        onTimeSelected(
+            hours[hourListState.firstVisibleItemIndex % hours.size],
+            minutes[minuteListState.firstVisibleItemIndex % minutes.size]
+        )
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 小时滚轮
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(100.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                LazyColumn(
+                    state = hourListState,
+                    flingBehavior = hourFling,
+                    contentPadding = PaddingValues(vertical = 35.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(hours.size) { index ->
+                        val h = hours[index]
+                        val isSelected = hourListState.firstVisibleItemIndex == index
+                        Text(
+                            text = String.format("%02d 时", h),
+                            fontSize = if (isSelected) 18.sp else 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(30.dp)
+                        )
+                    }
+                }
+            }
+
+            Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+            // 分钟滚轮 (1分钟间隔)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(100.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                LazyColumn(
+                    state = minuteListState,
+                    flingBehavior = minuteFling,
+                    contentPadding = PaddingValues(vertical = 35.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(minutes.size) { index ->
+                        val m = minutes[index]
+                        val isSelected = minuteListState.firstVisibleItemIndex == index
+                        Text(
+                            text = String.format("%02d 分", m),
+                            fontSize = if (isSelected) 18.sp else 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(30.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardScreen(
@@ -1024,25 +1131,16 @@ fun EditCardScreen(
             }
         }
 
-        Text("响铃时刻: ${String.format("%02d:%02d", remindHour, remindMinute)}", fontSize = 13.sp, color = Color.Gray)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("时: ", fontSize = 12.sp)
-                IconButton(onClick = { if (remindHour > 0) remindHour-- }) { Icon(Icons.Default.Remove, null) }
-                Text("$remindHour", fontWeight = FontWeight.Bold)
-                IconButton(onClick = { if (remindHour < 23) remindHour++ }) { Icon(Icons.Default.Add, null) }
+        // 上下滑动滚动选择响铃时间（1分钟颗粒度）
+        Text("响铃时刻 (上下滑动选择):", fontSize = 13.sp, color = Color.Gray)
+        WheelTimePicker(
+            initialHour = remindHour,
+            initialMinute = remindMinute,
+            onTimeSelected = { h, m ->
+                remindHour = h
+                remindMinute = m
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("分: ", fontSize = 12.sp)
-                IconButton(onClick = { if (remindMinute >= 5) remindMinute -= 5 else remindMinute = 0 }) { Icon(Icons.Default.Remove, null) }
-                Text("$remindMinute", fontWeight = FontWeight.Bold)
-                IconButton(onClick = { if (remindMinute <= 54) remindMinute += 5 else remindMinute = 59 }) { Icon(Icons.Default.Add, null) }
-            }
-        }
+        )
 
         Text("提前提醒:", fontSize = 13.sp, color = Color.Gray)
         FlowRow(
@@ -1136,7 +1234,7 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v2.5", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("卡片提醒助手 v2.6", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
         }
 
