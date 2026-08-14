@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -35,6 +36,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.PushPin
@@ -64,9 +67,11 @@ import coil.compose.AsyncImage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStreamReader
+import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -240,7 +245,7 @@ object CardStorage {
     }
 }
 
-// 导出与导入 CSV 处理工具类（全面修复权限与分享路径问题）
+// 自动检测 GBK / UTF-8 编码并解析 CSV 工具类
 object ExcelExportImportHelper {
     private val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -252,8 +257,7 @@ object ExcelExportImportHelper {
             val outputStream = FileOutputStream(file)
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
-            
-            val writer = outputStream.bufferedWriter()
+            val writer = outputStream.bufferedWriter(Charsets.UTF_8)
             writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
 
             cards.forEach { card ->
@@ -293,8 +297,7 @@ object ExcelExportImportHelper {
             val outputStream = FileOutputStream(file)
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
-            
-            val writer = outputStream.bufferedWriter()
+            val writer = outputStream.bufferedWriter(Charsets.UTF_8)
             writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
             writer.write("\"招商银行信用卡\",\"6225888899990000\",\"银行卡\",\"2026-12-31\",30,\"每月账单日5号\"\n")
             writer.write("\"香港手机卡\",\"+852 98765432\",\"电话卡\",\"2026-10-15\",180,\"需每半年发一条短信保号\"\n")
@@ -318,17 +321,21 @@ object ExcelExportImportHelper {
     fun parseCsvFromUri(context: Context, uri: Uri): List<CardItem> {
         val result = mutableListOf<CardItem>()
         try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return emptyList()
-            val reader = BufferedReader(InputStreamReader(inputStream))
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return emptyList()
+            
+            // 编码自动探测：检查 UTF-8 与 GBK
+            val charset = detectCharset(bytes)
+            val reader = BufferedReader(InputStreamReader(ByteArrayInputStream(bytes), charset))
             var isFirstLine = true
             var line: String?
 
             while (reader.readLine().also { line = it } != null) {
+                val cleanLine = (line ?: "").removePrefix("\uFEFF") // 移除 BOM
                 if (isFirstLine) {
                     isFirstLine = false
                     continue
                 }
-                val tokens = parseCsvLine(line ?: "")
+                val tokens = parseCsvLine(cleanLine)
                 if (tokens.isNotEmpty() && tokens[0].isNotBlank()) {
                     val title = tokens.getOrNull(0) ?: ""
                     val cardNumber = tokens.getOrNull(1) ?: ""
@@ -360,6 +367,23 @@ object ExcelExportImportHelper {
             e.printStackTrace()
         }
         return result
+    }
+
+    private fun detectCharset(bytes: ByteArray): Charset {
+        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) {
+            return Charsets.UTF_8
+        }
+        return try {
+            val decoder = Charsets.UTF_8.newDecoder()
+            decoder.decode(java.nio.ByteBuffer.wrap(bytes))
+            Charsets.UTF_8
+        } catch (e: Exception) {
+            try {
+                Charset.forName("GB18030")
+            } catch (ex: Exception) {
+                Charset.forName("GBK")
+            }
+        }
     }
 
     private fun parseCsvLine(line: String): List<String> {
@@ -431,10 +455,15 @@ fun MainTabContainer() {
     var operateConfirmCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
+    var isBatchManaging by remember { mutableStateOf(false) } // 批量管理页面状态
     var importPendingCards by remember { mutableStateOf<List<CardItem>?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
 
-    val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
+    val allCategories = remember(cardList) {
+        val defaultList = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
+        val customList = cardList.map { it.category }.distinct().filter { !defaultList.contains(it) }
+        defaultList + customList
+    }
 
     val displayList = remember(cardList, selectedCategoryFilter, currentSortOrder) {
         cardList.filter { selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter }
@@ -504,7 +533,8 @@ fun MainTabContainer() {
                     ),
                     title = {
                         Text(
-                            when (selectedTab) {
+                            if (isBatchManaging) "批量卡片整理"
+                            else when (selectedTab) {
                                 0 -> "分类浏览"
                                 1 -> "我的卡片"
                                 2 -> if (editingCard == null) "新增卡片" else "编辑卡片"
@@ -515,7 +545,7 @@ fun MainTabContainer() {
                         )
                     },
                     actions = {
-                        if (selectedTab == 1 || selectedTab == 0) {
+                        if (!isBatchManaging && (selectedTab == 1 || selectedTab == 0)) {
                             IconButton(onClick = { filterMenuExpanded = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "筛选排序")
                             }
@@ -525,7 +555,7 @@ fun MainTabContainer() {
                                 onDismissRequest = { filterMenuExpanded = false }
                             ) {
                                 Text(" 分类筛选", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
-                                categoryOptions.forEach { cat ->
+                                allCategories.forEach { cat ->
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -565,37 +595,39 @@ fun MainTabContainer() {
                 )
             },
             bottomBar = {
-                NavigationBar(
-                    containerColor = if (currentTheme == AppTheme.DARK) Color(0xFF1E1E1E) else Color.White,
-                    tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
-                        label = { Text("首页") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        icon = { Icon(Icons.Default.CreditCard, contentDescription = "列表") },
-                        label = { Text("列表") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 2,
-                        onClick = {
-                            editingCard = null
-                            selectedTab = 2
-                        },
-                        icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
-                        label = { Text("新增") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
-                        label = { Text("我的") }
-                    )
+                if (!isBatchManaging) {
+                    NavigationBar(
+                        containerColor = if (currentTheme == AppTheme.DARK) Color(0xFF1E1E1E) else Color.White,
+                        tonalElevation = 8.dp
+                    ) {
+                        NavigationBarItem(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
+                            label = { Text("首页") }
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            icon = { Icon(Icons.Default.CreditCard, contentDescription = "列表") },
+                            label = { Text("列表") }
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 2,
+                            onClick = {
+                                editingCard = null
+                                selectedTab = 2
+                            },
+                            icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
+                            label = { Text("新增") }
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 3,
+                            onClick = { selectedTab = 3 },
+                            icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
+                            label = { Text("我的") }
+                        )
+                    }
                 }
             }
         ) { padding ->
@@ -608,15 +640,26 @@ fun MainTabContainer() {
                     )
                     .padding(padding)
             ) {
-                when (selectedTab) {
-                    0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
-                        editingCard = card
-                        selectedTab = 2
-                    })
-                    1 -> ListScreen(
-                        displayList = displayList,
-                        onTogglePin = { card ->
-                            val newList = cardList.map {
+                if (isBatchManaging) {
+                    BatchManagementScreen(
+                        cardList = cardList,
+                        onBack = { isBatchManaging = false },
+                        onUpdateCards = { updatedList ->
+                            CardStorage.backupCurrentCards(context, cardList)
+                            cardList = updatedList
+                            CardStorage.saveCards(context, updatedList)
+                        }
+                    )
+                } else {
+                    when (selectedTab) {
+                        0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
+                            editingCard = card
+                            selectedTab = 2
+                        })
+                        1 -> ListScreen(
+                            displayList = displayList,
+                            onTogglePin = { card ->
+                                val newList = cardList.map {
                                 if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
                             }
                             cardList = newList
@@ -654,6 +697,9 @@ fun MainTabContainer() {
                         onThemeChanged = { newTheme ->
                             currentTheme = newTheme
                             CardStorage.saveTheme(context, newTheme)
+                        },
+                        onBatchManageClick = {
+                            isBatchManaging = true
                         },
                         onExportClick = {
                             if (cardList.isEmpty()) {
@@ -881,9 +927,308 @@ fun MainTabContainer() {
     }
 }
 
+// 批量整理独立全屏组件
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun BatchManagementScreen(
+    cardList: List<CardItem>,
+    onBack: () -> Unit,
+    onUpdateCards: (List<CardItem>) -> Unit
+) {
+    BackHandler { onBack() }
+
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showClearAllConfirm by remember { mutableStateOf(false) }
+    var showBatchCategoryDialog by remember { mutableStateOf(false) }
+    var showBatchExtendDialog by remember { mutableStateOf(false) }
+
+    val isAllSelected = cardList.isNotEmpty() && selectedIds.size == cardList.size
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "已勾选: ${selectedIds.size} / ${cardList.size} 张",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        selectedIds = if (isAllSelected) emptySet() else cardList.map { it.id }.toSet()
+                    },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(if (isAllSelected) "取消全选" else "全选", fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = onBack,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("完成返回", fontSize = 12.sp)
+                }
+            }
+        }
+
+        // 批量操作快捷按钮条
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Button(
+                onClick = { showDeleteConfirm = true },
+                enabled = selectedIds.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("删除所选", fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = { showBatchCategoryDialog = true },
+                enabled = selectedIds.isNotEmpty(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("修改分类", fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = { showBatchExtendDialog = true },
+                enabled = selectedIds.isNotEmpty(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Update, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("顺延到期日", fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = { showClearAllConfirm = true },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text("清空全部", fontSize = 12.sp)
+            }
+        }
+
+        HorizontalDivider()
+
+        if (cardList.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("当前无任何卡片", color = Color.Gray)
+            }
+        } else {
+            val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(cardList, key = { it.id }) { card ->
+                    val isChecked = selectedIds.contains(card.id)
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedIds = if (isChecked) selectedIds - card.id else selectedIds + card.id
+                            },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checked ->
+                                        selectedIds = if (checked) selectedIds + card.id else selectedIds - card.id
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        SuggestionChip(
+                                            onClick = {},
+                                            label = { Text(card.category, fontSize = 11.sp) }
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(card.title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    }
+                                    if (card.cardNumber.isNotBlank()) {
+                                        Text(card.cardNumber, fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                            Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("确认批量删除", fontWeight = FontWeight.Bold) },
+            text = { Text("确定要删除选中的 ${selectedIds.size} 张卡片吗？此操作不可逆（已自动备份）。") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        val remaining = cardList.filter { !selectedIds.contains(it.id) }
+                        onUpdateCards(remaining)
+                        selectedIds = emptySet()
+                        showDeleteConfirm = false
+                    }
+                ) {
+                    Text("确认删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showClearAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirm = false },
+            title = { Text("危险：确认清空全部卡片？", fontWeight = FontWeight.Bold) },
+            text = { Text("将彻底清空当前所有卡片数据！系统已为您自动快照备份，随时可在“我的”页面恢复。") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        onUpdateCards(emptyList())
+                        selectedIds = emptySet()
+                        showClearAllConfirm = false
+                    }
+                ) {
+                    Text("清空全部")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllConfirm = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showBatchCategoryDialog) {
+        val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
+        var targetCat by remember { mutableStateOf(categories[0]) }
+        var isCustomCat by remember { mutableStateOf(false) }
+        var customCatInput by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showBatchCategoryDialog = false },
+            title = { Text("批量修改分类", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("将选中的 ${selectedIds.size} 张卡片统一更改分类为：")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        categories.forEach { cat ->
+                            FilterChip(
+                                selected = !isCustomCat && targetCat == cat,
+                                onClick = {
+                                    isCustomCat = false
+                                    targetCat = cat
+                                },
+                                label = { Text(cat) }
+                            )
+                        }
+                        FilterChip(
+                            selected = isCustomCat,
+                            onClick = { isCustomCat = true },
+                            label = { Text("自定义") }
+                        )
+                    }
+                    if (isCustomCat) {
+                        OutlinedTextField(
+                            value = customCatInput,
+                            onValueChange = { customCatInput = it },
+                            label = { Text("输入新分类名") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalCat = if (isCustomCat && customCatInput.isNotBlank()) customCatInput.trim() else targetCat
+                        val updated = cardList.map {
+                            if (selectedIds.contains(it.id)) it.copy(category = finalCat) else it
+                        }
+                        onUpdateCards(updated)
+                        showBatchCategoryDialog = false
+                    }
+                ) {
+                    Text("确认修改")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchCategoryDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showBatchExtendDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatchExtendDialog = false },
+            title = { Text("批量顺延到期日", fontWeight = FontWeight.Bold) },
+            text = { Text("将根据选中 ${selectedIds.size} 张卡片各自设定的【提醒/续期间隔天数】，统一向后顺延计算新的到期日。") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val updated = cardList.map { card ->
+                            if (selectedIds.contains(card.id)) {
+                                val nextCal = Calendar.getInstance().apply {
+                                    timeInMillis = card.expiryDateMillis
+                                    add(Calendar.DAY_OF_MONTH, if (card.intervalDays > 0) card.intervalDays else 30)
+                                }
+                                card.copy(expiryDateMillis = nextCal.timeInMillis)
+                            } else {
+                                card
+                            }
+                        }
+                        onUpdateCards(updated)
+                        showBatchExtendDialog = false
+                    }
+                ) {
+                    Text("确认顺延")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchExtendDialog = false }) { Text("取消") }
+            }
+        )
+    }
+}
+
 @Composable
 fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
-    val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
+    val defaultCategories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
+    val customCategories = cardList.map { it.category }.distinct().filter { !defaultCategories.contains(it) }
+    val categories = defaultCategories + customCategories
     val now = System.currentTimeMillis()
 
     if (cardList.isEmpty()) {
@@ -1135,7 +1480,6 @@ fun SwipeableCardItem(
                 }
 
                 val textColor = if (isDarkBg) Color.White else Color.Black
-                // 置顶与删除按钮高对比度颜色
                 val iconActionColor = if (isDarkBg) Color.White.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.65f)
                 val iconPinnedActiveColor = if (isDarkBg) Color(0xFFFFD54F) else MaterialTheme.colorScheme.primary
 
@@ -1246,6 +1590,7 @@ fun SwipeableCardItem(
     }
 }
 
+// 新增与编辑模块：支持“自定义分类”输入
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardScreen(
@@ -1255,7 +1600,7 @@ fun EditCardScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    val categories = remember { listOf("银行卡", "电话卡", "邮箱", "账号", "其他") }
+    val presetCategories = remember { listOf("银行卡", "电话卡", "邮箱", "账号", "其他") }
     val presetIntervals = remember { listOf(0, 3, 7, 15, 30) }
 
     val presetColors = remember {
@@ -1271,7 +1616,11 @@ fun EditCardScreen(
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var note by remember { mutableStateOf(initialCard?.note ?: "") }
-    var selectedCategory by remember { mutableStateOf(initialCard?.category ?: categories[0]) }
+    
+    // 分类自定义逻辑
+    var selectedCategory by remember { mutableStateOf(initialCard?.category ?: presetCategories[0]) }
+    var isCustomCategory by remember { mutableStateOf(!presetCategories.contains(initialCard?.category ?: presetCategories[0])) }
+    var customCategoryInput by remember { mutableStateOf(if (isCustomCategory) (initialCard?.category ?: "") else "") }
 
     var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
     var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
@@ -1360,13 +1709,31 @@ fun EditCardScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                categories.forEach { cat ->
+                presetCategories.forEach { cat ->
                     FilterChip(
-                        selected = selectedCategory == cat,
-                        onClick = { selectedCategory = cat },
+                        selected = !isCustomCategory && selectedCategory == cat,
+                        onClick = {
+                            isCustomCategory = false
+                            selectedCategory = cat
+                        },
                         label = { Text(cat) }
                     )
                 }
+                FilterChip(
+                    selected = isCustomCategory,
+                    onClick = { isCustomCategory = true },
+                    label = { Text("自定义分类") }
+                )
+            }
+
+            if (isCustomCategory) {
+                OutlinedTextField(
+                    value = customCategoryInput,
+                    onValueChange = { customCategoryInput = it },
+                    label = { Text("输入自定义分类 (如: 会员卡/公积金)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
@@ -1473,6 +1840,8 @@ fun EditCardScreen(
                         set(Calendar.SECOND, 0)
                     }
 
+                    val finalCategory = if (isCustomCategory && customCategoryInput.isNotBlank()) customCategoryInput.trim() else selectedCategory
+
                     val finalInterval = if (isCustomInterval) {
                         customIntervalInput.toIntOrNull() ?: 30
                     } else {
@@ -1483,7 +1852,7 @@ fun EditCardScreen(
                         id = initialCard?.id ?: UUID.randomUUID().toString(),
                         title = title,
                         cardNumber = cardNumber,
-                        category = selectedCategory,
+                        category = finalCategory,
                         note = note,
                         expiryDateMillis = saveCalendar.timeInMillis,
                         intervalDays = finalInterval,
@@ -1502,12 +1871,14 @@ fun EditCardScreen(
     }
 }
 
+// “我的”模块
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileScreen(
     currentTheme: AppTheme,
     cardCount: Int,
     onThemeChanged: (AppTheme) -> Unit,
+    onBatchManageClick: () -> Unit,
     onExportClick: () -> Unit,
     onExportTemplateClick: () -> Unit,
     onImportFileParsed: (List<CardItem>) -> Unit,
@@ -1558,10 +1929,41 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v3.3", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("卡片提醒助手 v3.4", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("已安全管理 $cardCount 张卡片", color = Color.Gray, fontSize = 13.sp)
         }
 
+        // 卡片整理（批量管理）入口
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onBatchManageClick() }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.Checklist,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("卡片批量整理与管理", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("多选、批量删除、批量改分类及批量顺延", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+            }
+        }
+
+        // 数据备份与 Excel 导入导出卡片
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -1628,6 +2030,7 @@ fun ProfileScreen(
             }
         }
 
+        // 主题设置
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
