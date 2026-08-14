@@ -720,7 +720,7 @@ fun SwipeableCardItem(
     card: CardItem,
     onTogglePin: () -> Unit,
     onLongClickPin: () -> Unit,
-    onEdit: (CardItem) -> Unit,
+    onEdit: () -> Unit,
     onOperated: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -729,10 +729,10 @@ fun SwipeableCardItem(
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.StartToEnd) {
-                onEdit(card)
+                onEdit()
                 false
             } else if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDelete(card)
+                onDelete()
                 false
             } else false
         }
@@ -766,7 +766,7 @@ fun SwipeableCardItem(
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = { expandedNote = !expandedNote },
-                    onLongClick = { onLongClickPin() }
+                    onLongClick = onLongClickPin
                 ),
             shape = RoundedCornerShape(12.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -813,7 +813,7 @@ fun SwipeableCardItem(
                                     tint = if (card.isPinned) MaterialTheme.colorScheme.primary else textColor.copy(alpha = 0.6f)
                                 )
                             }
-                            IconButton(onClick = onDelete) {
+                            IconButton(onClick = { onDelete() }) {
                                 Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textColor.copy(alpha = 0.6f))
                             }
                         }
@@ -859,7 +859,7 @@ fun SwipeableCardItem(
                         }
 
                         Button(
-                            onClick = onOperated,
+                            onClick = { onOperated() },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26A69A)),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
