@@ -82,6 +82,313 @@ import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.*
 
+// 多语言枚举
+enum class AppLanguage(val code: String, val displayName: String) {
+    ZH_CN("zh_CN", "简体中文"),
+    ZH_TW("zh_TW", "繁體中文"),
+    EN("en", "English"),
+    JA("ja", "日本語"),
+    PT("pt", "Português")
+}
+
+// 多语言字典提供者
+object StringsProvider {
+    fun get(key: String, lang: AppLanguage): String {
+        return when (lang) {
+            AppLanguage.ZH_TW -> when (key) {
+                "nav_home" -> "首頁"
+                "nav_list" -> "列表"
+                "nav_add" -> "新增"
+                "nav_mine" -> "我的"
+                "title_home" -> "分類瀏覽"
+                "title_list" -> "我的卡片"
+                "title_add" -> "新增卡片"
+                "title_edit" -> "編輯卡片"
+                "title_mine" -> "個人中心"
+                "title_batch" -> "批量卡片整理"
+                "search_hint" -> "搜尋卡片名稱 / 卡號 / 備註..."
+                "empty_data" -> "暫無卡片數據，點擊底部“新增”添加"
+                "expired" -> "已過期"
+                "days_left" -> "剩%d天"
+                "expire_date" -> "到期"
+                "remind_interval" -> "提醒間隔"
+                "no_remind" -> "不提醒"
+                "update" -> "更新"
+                "confirm_update" -> "更新到期日確認"
+                "confirm_update_desc" -> "將基於提醒間隔 (%d天)，順延更新到期日期為："
+                "btn_confirm_update" -> "確認更新"
+                "cancel" -> "取消"
+                "card_name" -> "名稱 (如: 招商信用卡)"
+                "card_number" -> "卡號 / 帳號 (選填)"
+                "note" -> "備註信息 (選填)"
+                "sync_calendar" -> "同時自動同步到手機系統行事曆"
+                "category" -> "卡片分類:"
+                "custom_category" -> "自訂分類"
+                "custom_category_hint" -> "輸入自訂分類 (如: 會員卡)"
+                "custom_bg" -> "自訂背景樣式:"
+                "select_photo" -> "選擇相簿"
+                "photo_selected" -> "已選相簿圖片"
+                "expire_date_label" -> "到期日期:"
+                "remind_interval_label" -> "提醒/續期間隔天數:"
+                "custom_interval" -> "自訂"
+                "custom_interval_hint" -> "輸入自訂間隔天數 (如: 60)"
+                "save_card" -> "儲存卡片信息"
+                "batch_manage" -> "卡片批量整理與管理"
+                "batch_manage_desc" -> "多選、批量刪除、批量改分類及批量順延"
+                "biometric_title" -> "應用生物識別鎖 (指紋/面容)"
+                "biometric_desc" -> "開啟後啟動應用需進行身分驗證"
+                "data_backup" -> "數據備份與表格導入導出"
+                "export_csv" -> "導出表格"
+                "import_csv" -> "導入表格"
+                "download_template" -> "下載導入模板"
+                "restore_backup" -> "恢復上次備份"
+                "theme_setting" -> "軟體外觀主題設置"
+                "lang_setting" -> "軟體語言設置 (Language)"
+                "all" -> "全部"
+                "bank_card" -> "銀行卡"
+                "sim_card" -> "電話卡"
+                "email" -> "郵箱"
+                "account" -> "帳號"
+                "other" -> "其他"
+                "day" -> "天"
+                else -> key
+            }
+            AppLanguage.EN -> when (key) {
+                "nav_home" -> "Home"
+                "nav_list" -> "Cards"
+                "nav_add" -> "Add"
+                "nav_mine" -> "Profile"
+                "title_home" -> "Categories"
+                "title_list" -> "My Cards"
+                "title_add" -> "Add Card"
+                "title_edit" -> "Edit Card"
+                "title_mine" -> "Profile"
+                "title_batch" -> "Batch Management"
+                "search_hint" -> "Search name / card number / notes..."
+                "empty_data" -> "No cards found. Tap 'Add' to create one."
+                "expired" -> "Expired"
+                "days_left" -> "%d days left"
+                "expire_date" -> "Expiry"
+                "remind_interval" -> "Interval"
+                "no_remind" -> "None"
+                "update" -> "Renew"
+                "confirm_update" -> "Confirm Renewal"
+                "confirm_update_desc" -> "Extend expiry date based on interval (%d days) to:"
+                "btn_confirm_update" -> "Confirm"
+                "cancel" -> "Cancel"
+                "card_name" -> "Card Name (e.g. Visa Debit)"
+                "card_number" -> "Card / Account Number (Optional)"
+                "note" -> "Notes (Optional)"
+                "sync_calendar" -> "Sync to device system calendar"
+                "category" -> "Category:"
+                "custom_category" -> "Custom"
+                "custom_category_hint" -> "Enter custom category"
+                "custom_bg" -> "Card Style:"
+                "select_photo" -> "Gallery"
+                "photo_selected" -> "Image Selected"
+                "expire_date_label" -> "Expiry Date:"
+                "remind_interval_label" -> "Renewal Interval Days:"
+                "custom_interval" -> "Custom"
+                "custom_interval_hint" -> "Enter custom days (e.g. 60)"
+                "save_card" -> "Save Card Information"
+                "batch_manage" -> "Batch Card Management"
+                "batch_manage_desc" -> "Select, delete, change category and renew in batch"
+                "biometric_title" -> "Biometric App Lock (Fingerprint/Face)"
+                "biometric_desc" -> "Require authentication when opening app"
+                "data_backup" -> "Data Backup & CSV Excel"
+                "export_csv" -> "Export CSV"
+                "import_csv" -> "Import CSV"
+                "download_template" -> "Download Template"
+                "restore_backup" -> "Restore Backup"
+                "theme_setting" -> "App Theme & Appearance"
+                "lang_setting" -> "Language Settings"
+                "all" -> "All"
+                "bank_card" -> "Bank Card"
+                "sim_card" -> "SIM Card"
+                "email" -> "Email"
+                "account" -> "Account"
+                "other" -> "Others"
+                "day" -> "d"
+                else -> key
+            }
+            AppLanguage.JA -> when (key) {
+                "nav_home" -> "ホーム"
+                "nav_list" -> "カード"
+                "nav_add" -> "追加"
+                "nav_mine" -> "マイ"
+                "title_home" -> "カテゴリ一覧"
+                "title_list" -> "マイカード"
+                "title_add" -> "カード追加"
+                "title_edit" -> "カード編集"
+                "title_mine" -> "マイページ"
+                "title_batch" -> "一括整理"
+                "search_hint" -> "名前・番号・メモを検索..."
+                "empty_data" -> "カードがありません。「追加」から作成してください"
+                "expired" -> "期限切れ"
+                "days_left" -> "残り%d日"
+                "expire_date" -> "有効期限"
+                "remind_interval" -> "更新間隔"
+                "no_remind" -> "なし"
+                "update" -> "更新"
+                "confirm_update" -> "期限更新の確認"
+                "confirm_update_desc" -> "更新間隔（%d日）に基づいて有効期限を延長します："
+                "btn_confirm_update" -> "更新する"
+                "cancel" -> "キャンセル"
+                "card_name" -> "カード名 (例: 楽天カード)"
+                "card_number" -> "カード番号 / 口座 (任意)"
+                "note" -> "備考 (任意)"
+                "sync_calendar" -> "スマホのカレンダーに自動同期する"
+                "category" -> "カテゴリ:"
+                "custom_category" -> "カスタム"
+                "custom_category_hint" -> "カスタムカテゴリを入力"
+                "custom_bg" -> "背景スタイル:"
+                "select_photo" -> "写真選択"
+                "photo_selected" -> "画像選択済み"
+                "expire_date_label" -> "有効期限:"
+                "remind_interval_label" -> "更新間隔日数:"
+                "custom_interval" -> "カスタム"
+                "custom_interval_hint" -> "日数を入力 (例: 60)"
+                "save_card" -> "カード情報を保存"
+                "batch_manage" -> "カード一括整理・管理"
+                "batch_manage_desc" -> "複数選択、一括削除、カテゴリ変更、一括更新"
+                "biometric_title" -> "生体認証ロック (指紋・顔認証)"
+                "biometric_desc" -> "起動時に認証を要求します"
+                "data_backup" -> "データバックアップとExcel入出力"
+                "export_csv" -> "CSV出力"
+                "import_csv" -> "CSV読込"
+                "download_template" -> "テンプレート取得"
+                "restore_backup" -> "バックアップ復元"
+                "theme_setting" -> "外観テーマ設定"
+                "lang_setting" -> "言語設定 (Language)"
+                "all" -> "すべて"
+                "bank_card" -> "銀行カード"
+                "sim_card" -> "SIMカード"
+                "email" -> "メール"
+                "account" -> "アカウント"
+                "other" -> "その他"
+                "day" -> "日"
+                else -> key
+            }
+            AppLanguage.PT -> when (key) {
+                "nav_home" -> "Início"
+                "nav_list" -> "Cartões"
+                "nav_add" -> "Adicionar"
+                "nav_mine" -> "Perfil"
+                "title_home" -> "Categorias"
+                "title_list" -> "Meus Cartões"
+                "title_add" -> "Adicionar Cartão"
+                "title_edit" -> "Editar Cartão"
+                "title_mine" -> "Perfil"
+                "title_batch" -> "Gerenciamento em Lote"
+                "search_hint" -> "Buscar por nome / número / notas..."
+                "empty_data" -> "Nenhum cartão. Toque em 'Adicionar' para criar."
+                "expired" -> "Expirado"
+                "days_left" -> "%d dias restantes"
+                "expire_date" -> "Validade"
+                "remind_interval" -> "Intervalo"
+                "no_remind" -> "Nenhum"
+                "update" -> "Renovar"
+                "confirm_update" -> "Confirmar Renovação"
+                "confirm_update_desc" -> "Estender a validade com base no intervalo (%d dias) para:"
+                "btn_confirm_update" -> "Confirmar"
+                "cancel" -> "Cancelar"
+                "card_name" -> "Nome do Cartão"
+                "card_number" -> "Número do Cartão / Conta (Opcional)"
+                "note" -> "Notas (Opcional)"
+                "sync_calendar" -> "Sincronizar com o calendário do sistema"
+                "category" -> "Categoria:"
+                "custom_category" -> "Personalizado"
+                "custom_category_hint" -> "Insira a categoria personalizada"
+                "custom_bg" -> "Estilo do Cartão:"
+                "select_photo" -> "Galeria"
+                "photo_selected" -> "Imagem Selecionada"
+                "expire_date_label" -> "Data de Validade:"
+                "remind_interval_label" -> "Dias de Intervalo de Renovação:"
+                "custom_interval" -> "Personalizado"
+                "custom_interval_hint" -> "Insira os dias (ex: 60)"
+                "save_card" -> "Salvar Cartão"
+                "batch_manage" -> "Gerenciamento em Lote"
+                "batch_manage_desc" -> "Selecionar, excluir, alterar categoria e renovar"
+                "biometric_title" -> "Bloqueio Biométrico (Digital/Face)"
+                "biometric_desc" -> "Exigir autenticação ao abrir o aplicativo"
+                "data_backup" -> "Backup de Dados e CSV Excel"
+                "export_csv" -> "Exportar CSV"
+                "import_csv" -> "Importar CSV"
+                "download_template" -> "Baixar Modelo"
+                "restore_backup" -> "Restaurar Backup"
+                "theme_setting" -> "Tema e Aparência"
+                "lang_setting" -> "Configurações de Idioma"
+                "all" -> "Todos"
+                "bank_card" -> "Cartão Bancário"
+                "sim_card" -> "Cartão SIM"
+                "email" -> "E-mail"
+                "account" -> "Conta"
+                "other" -> "Outros"
+                "day" -> "d"
+                else -> key
+            }
+            AppLanguage.ZH_CN -> when (key) {
+                "nav_home" -> "首页"
+                "nav_list" -> "列表"
+                "nav_add" -> "新增"
+                "nav_mine" -> "我的"
+                "title_home" -> "分类浏览"
+                "title_list" -> "我的卡片"
+                "title_add" -> "新增卡片"
+                "title_edit" -> "编辑卡片"
+                "title_mine" -> "个人中心"
+                "title_batch" -> "批量卡片整理"
+                "search_hint" -> "搜索卡片名称 / 卡号 / 备注..."
+                "empty_data" -> "暂无卡片数据，点击底部“新增”添加"
+                "expired" -> "已过期"
+                "days_left" -> "剩%d天"
+                "expire_date" -> "到期"
+                "remind_interval" -> "提醒间隔"
+                "no_remind" -> "不提醒"
+                "update" -> "更新"
+                "confirm_update" -> "更新到期日确认"
+                "confirm_update_desc" -> "将基于提醒间隔 (%d天)，顺延更新到期日期为："
+                "btn_confirm_update" -> "确认更新"
+                "cancel" -> "取消"
+                "card_name" -> "名称 (如: 招商信用卡)"
+                "card_number" -> "卡号 / 账号 (选填)"
+                "note" -> "备注信息 (选填)"
+                "sync_calendar" -> "同时自动同步到手机系统日历日程"
+                "category" -> "卡片分类:"
+                "custom_category" -> "自定义分类"
+                "custom_category_hint" -> "输入自定义分类 (如: 会员卡/公积金)"
+                "custom_bg" -> "自定义背景样式:"
+                "select_photo" -> "选择相册"
+                "photo_selected" -> "已选相册图片"
+                "expire_date_label" -> "到期日期:"
+                "remind_interval_label" -> "提醒/续期间隔天数:"
+                "custom_interval" -> "自定义"
+                "custom_interval_hint" -> "输入自定义间隔天数 (如: 60)"
+                "save_card" -> "保存卡片信息"
+                "batch_manage" -> "卡片批量整理与管理"
+                "batch_manage_desc" -> "多选、批量删除、批量改分类及批量顺延"
+                "biometric_title" -> "应用生物识别锁 (指纹/面容)"
+                "biometric_desc" -> "开启后启动应用需进行身份验证"
+                "data_backup" -> "数据备份与表格导入导出"
+                "export_csv" -> "导出表格"
+                "import_csv" -> "导入表格"
+                "download_template" -> "下载导入模板"
+                "restore_backup" -> "恢复上次备份"
+                "theme_setting" -> "软件外观主题设置"
+                "lang_setting" -> "软件语言设置 (Language)"
+                "all" -> "全部"
+                "bank_card" -> "银行卡"
+                "sim_card" -> "电话卡"
+                "email" -> "邮箱"
+                "account" -> "账号"
+                "other" -> "其他"
+                "day" -> "天"
+                else -> key
+            }
+        }
+    }
+}
+
 enum class AppTheme(val displayName: String, val isDynamic: Boolean) {
     DEFAULT("默认明亮", false),
     DARK("深色夜间", false),
@@ -134,8 +441,6 @@ data class CardItem(
     val pinTime: Long = 0L,
     val bgType: String = "COLOR",
     val bgValue: String = "0xFFFFFFFF",
-    val cost: Double = 0.0,
-    val costCycle: String = "每年",
     val syncCalendar: Boolean = false,
     val historyLogs: List<String> = emptyList()
 )
@@ -147,6 +452,7 @@ object CardStorage {
     private const val KEY_BACKUP_TIME = "key_backup_time"
     private const val KEY_LAST_EXPORT_TIME = "key_last_export_time"
     private const val KEY_THEME = "key_app_theme"
+    private const val KEY_LANGUAGE = "key_app_language"
     private const val KEY_BIOMETRIC_ENABLED = "key_biometric_enabled"
 
     fun saveCards(context: Context, cards: List<CardItem>) {
@@ -164,8 +470,6 @@ object CardStorage {
                 put("pinTime", card.pinTime)
                 put("bgType", card.bgType)
                 put("bgValue", card.bgValue)
-                put("cost", card.cost)
-                put("costCycle", card.costCycle)
                 put("syncCalendar", card.syncCalendar)
                 val logArray = JSONArray()
                 card.historyLogs.forEach { logArray.put(it) }
@@ -198,8 +502,6 @@ object CardStorage {
                 put("pinTime", card.pinTime)
                 put("bgType", card.bgType)
                 put("bgValue", card.bgValue)
-                put("cost", card.cost)
-                put("costCycle", card.costCycle)
                 put("syncCalendar", card.syncCalendar)
                 val logArray = JSONArray()
                 card.historyLogs.forEach { logArray.put(it) }
@@ -259,8 +561,6 @@ object CardStorage {
                         pinTime = obj.optLong("pinTime", 0L),
                         bgType = obj.optString("bgType", "COLOR"),
                         bgValue = obj.optString("bgValue", "0xFFFFFFFF"),
-                        cost = obj.optDouble("cost", 0.0),
-                        costCycle = obj.optString("costCycle", "每年"),
                         syncCalendar = obj.optBoolean("syncCalendar", false),
                         historyLogs = logs
                     )
@@ -281,6 +581,17 @@ object CardStorage {
         val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         val name = sp.getString(KEY_THEME, AppTheme.DEFAULT.name)
         return try { AppTheme.valueOf(name!!) } catch (e: Exception) { AppTheme.DEFAULT }
+    }
+
+    fun saveLanguage(context: Context, lang: AppLanguage) {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        sp.edit().putString(KEY_LANGUAGE, lang.name).apply()
+    }
+
+    fun loadLanguage(context: Context): AppLanguage {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val name = sp.getString(KEY_LANGUAGE, AppLanguage.ZH_CN.name)
+        return try { AppLanguage.valueOf(name!!) } catch (e: Exception) { AppLanguage.ZH_CN }
     }
 
     fun setBiometricEnabled(context: Context, enabled: Boolean) {
@@ -355,7 +666,7 @@ object ExcelExportImportHelper {
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
             val writer = outputStream.bufferedWriter(Charsets.UTF_8)
-            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,维护费用,费用周期,备注\n")
+            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
 
             cards.forEach { card ->
                 val dateStr = sdf.format(Date(card.expiryDateMillis))
@@ -364,8 +675,6 @@ object ExcelExportImportHelper {
                            "\"${card.category.replace("\"", "\"\"")}\"," +
                            "\"$dateStr\"," +
                            "${card.intervalDays}," +
-                           "${card.cost}," +
-                           "\"${card.costCycle}\"," +
                            "\"${card.note.replace("\"", "\"\"")}\"\n"
                 writer.write(line)
             }
@@ -397,9 +706,9 @@ object ExcelExportImportHelper {
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
             val writer = outputStream.bufferedWriter(Charsets.UTF_8)
-            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,维护费用,费用周期,备注\n")
-            writer.write("\"招商银行信用卡\",\"6225888899990000\",\"银行卡\",\"2026-12-31\",30,0.0,\"每年\",\"每月账单日5号\"\n")
-            writer.write("\"香港手机卡\",\"+852 98765432\",\"电话卡\",\"2026-10-15\",180,6.0,\"每年\",\"需每半年发一条短信保号\"\n")
+            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
+            writer.write("\"招商银行信用卡\",\"6225888899990000\",\"银行卡\",\"2026-12-31\",30,\"每月账单日5号\"\n")
+            writer.write("\"香港手机卡\",\"+852 98765432\",\"电话卡\",\"2026-10-15\",180,\"需每半年发一条短信保号\"\n")
             writer.flush()
             writer.close()
 
@@ -439,9 +748,7 @@ object ExcelExportImportHelper {
                     val category = tokens.getOrNull(2) ?: "其他"
                     val dateStr = tokens.getOrNull(3) ?: ""
                     val interval = tokens.getOrNull(4)?.toIntOrNull() ?: 30
-                    val cost = tokens.getOrNull(5)?.toDoubleOrNull() ?: 0.0
-                    val costCycle = tokens.getOrNull(6) ?: "每年"
-                    val note = tokens.getOrNull(7) ?: ""
+                    val note = tokens.getOrNull(5) ?: ""
 
                     val dateMillis = try {
                         sdf.parse(dateStr)?.time ?: System.currentTimeMillis()
@@ -456,8 +763,6 @@ object ExcelExportImportHelper {
                             category = category,
                             expiryDateMillis = dateMillis,
                             intervalDays = interval,
-                            cost = cost,
-                            costCycle = costCycle,
                             note = note
                         )
                     )
@@ -549,9 +854,10 @@ fun MainTabContainer() {
 
     var cardList by remember { mutableStateOf(CardStorage.loadCards(context)) }
     var currentTheme by remember { mutableStateOf(CardStorage.loadTheme(context)) }
+    var currentLanguage by remember { mutableStateOf(CardStorage.loadLanguage(context)) }
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCategoryFilter by remember { mutableStateOf("全部") }
+    var selectedCategoryFilter by remember { mutableStateOf(StringsProvider.get("all", currentLanguage)) }
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
@@ -614,16 +920,24 @@ fun MainTabContainer() {
         return
     }
 
-    val allCategories = remember(cardList) {
-        val defaultList = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
+    val allCategories = remember(cardList, currentLanguage) {
+        val defaultList = listOf(
+            StringsProvider.get("all", currentLanguage),
+            StringsProvider.get("bank_card", currentLanguage),
+            StringsProvider.get("sim_card", currentLanguage),
+            StringsProvider.get("email", currentLanguage),
+            StringsProvider.get("account", currentLanguage),
+            StringsProvider.get("other", currentLanguage)
+        )
         val customList = cardList.map { it.category }.distinct().filter { !defaultList.contains(it) }
         defaultList + customList
     }
 
     val now = System.currentTimeMillis()
-    val displayList = remember(cardList, searchQuery, selectedCategoryFilter, currentSortOrder) {
+    val displayList = remember(cardList, searchQuery, selectedCategoryFilter, currentSortOrder, currentLanguage) {
+        val allStr = StringsProvider.get("all", currentLanguage)
         val filtered = cardList.filter {
-            (selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter) &&
+            (selectedCategoryFilter == allStr || it.category == selectedCategoryFilter) &&
             (searchQuery.isBlank() || it.title.contains(searchQuery, true) || it.cardNumber.contains(searchQuery, true) || it.note.contains(searchQuery, true))
         }
         filtered.sortedWith { a, b ->
@@ -697,12 +1011,12 @@ fun MainTabContainer() {
                     ),
                     title = {
                         Text(
-                            if (isBatchManaging) "批量卡片整理"
+                            if (isBatchManaging) StringsProvider.get("title_batch", currentLanguage)
                             else when (selectedTab) {
-                                0 -> "分类浏览"
-                                1 -> "我的卡片"
-                                2 -> if (editingCard == null) "新增卡片" else "编辑卡片"
-                                else -> "个人中心"
+                                0 -> StringsProvider.get("title_home", currentLanguage)
+                                1 -> StringsProvider.get("title_list", currentLanguage)
+                                2 -> if (editingCard == null) StringsProvider.get("title_add", currentLanguage) else StringsProvider.get("title_edit", currentLanguage)
+                                else -> StringsProvider.get("title_mine", currentLanguage)
                             },
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp
@@ -718,7 +1032,6 @@ fun MainTabContainer() {
                                 expanded = filterMenuExpanded,
                                 onDismissRequest = { filterMenuExpanded = false }
                             ) {
-                                Text(" 分类筛选", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
                                 allCategories.forEach { cat ->
                                     DropdownMenuItem(
                                         text = {
@@ -741,8 +1054,6 @@ fun MainTabContainer() {
                                 }
 
                                 HorizontalDivider()
-                                Text(" 到期时间排序", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = Color.Gray)
-
                                 DropdownMenuItem(
                                     text = { Text("按到期日期升序", color = if (currentSortOrder == SortOrder.EXPIRY_ASC) MaterialTheme.colorScheme.primary else Color.Unspecified) },
                                     leadingIcon = { if (currentSortOrder == SortOrder.EXPIRY_ASC) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) },
@@ -767,14 +1078,14 @@ fun MainTabContainer() {
                         NavigationBarItem(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
-                            icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
-                            label = { Text("首页") }
+                            icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                            label = { Text(StringsProvider.get("nav_home", currentLanguage)) }
                         )
                         NavigationBarItem(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
-                            icon = { Icon(Icons.Default.CreditCard, contentDescription = "列表") },
-                            label = { Text("列表") }
+                            icon = { Icon(Icons.Default.CreditCard, contentDescription = null) },
+                            label = { Text(StringsProvider.get("nav_list", currentLanguage)) }
                         )
                         NavigationBarItem(
                             selected = selectedTab == 2,
@@ -782,14 +1093,14 @@ fun MainTabContainer() {
                                 editingCard = null
                                 selectedTab = 2
                             },
-                            icon = { Icon(Icons.Default.AddCircle, contentDescription = "新增") },
-                            label = { Text("新增") }
+                            icon = { Icon(Icons.Default.AddCircle, contentDescription = null) },
+                            label = { Text(StringsProvider.get("nav_add", currentLanguage)) }
                         )
                         NavigationBarItem(
                             selected = selectedTab == 3,
                             onClick = { selectedTab = 3 },
-                            icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
-                            label = { Text("我的") }
+                            icon = { Icon(Icons.Default.Person, contentDescription = null) },
+                            label = { Text(StringsProvider.get("nav_mine", currentLanguage)) }
                         )
                     }
                 }
@@ -807,6 +1118,7 @@ fun MainTabContainer() {
                 if (isBatchManaging) {
                     BatchManagementScreen(
                         cardList = cardList,
+                        currentLanguage = currentLanguage,
                         onBack = { isBatchManaging = false },
                         onUpdateCards = { updatedList ->
                             CardStorage.backupCurrentCards(context, cardList)
@@ -816,13 +1128,14 @@ fun MainTabContainer() {
                     )
                 } else {
                     when (selectedTab) {
-                        0 -> CategorizedHomeScreen(cardList = cardList, onEdit = { card ->
+                        0 -> CategorizedHomeScreen(cardList = cardList, currentLanguage = currentLanguage, onEdit = { card ->
                             editingCard = card
                             selectedTab = 2
                         })
                         1 -> ListScreen(
                             displayList = displayList,
                             searchQuery = searchQuery,
+                            currentLanguage = currentLanguage,
                             onSearchQueryChange = { searchQuery = it },
                             onTogglePin = { card ->
                                 val newList = cardList.map {
@@ -847,6 +1160,7 @@ fun MainTabContainer() {
                         )
                         2 -> EditCardScreen(
                             initialCard = editingCard,
+                            currentLanguage = currentLanguage,
                             onSave = { newCard ->
                                 val updatedList = cardList.filter { it.id != newCard.id } + newCard
                                 cardList = updatedList
@@ -860,10 +1174,16 @@ fun MainTabContainer() {
                         )
                         3 -> ProfileScreen(
                             currentTheme = currentTheme,
-                            cardList = cardList,
+                            currentLanguage = currentLanguage,
+                            cardCount = cardList.size,
                             onThemeChanged = { newTheme ->
                                 currentTheme = newTheme
                                 CardStorage.saveTheme(context, newTheme)
+                            },
+                            onLanguageChanged = { newLang ->
+                                currentLanguage = newLang
+                                CardStorage.saveLanguage(context, newLang)
+                                selectedCategoryFilter = StringsProvider.get("all", newLang)
                             },
                             onBatchManageClick = {
                                 isBatchManaging = true
@@ -990,13 +1310,13 @@ fun MainTabContainer() {
 
         AlertDialog(
             onDismissRequest = { operateConfirmCard = null },
-            title = { Text("更新到期日确认", fontWeight = FontWeight.Bold) },
+            title = { Text(StringsProvider.get("confirm_update", currentLanguage), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("卡片：${card.title}")
-                    Text("当前到期日期：$currentExpiryStr", color = Color.Gray, fontSize = 13.sp)
+                    Text("${StringsProvider.get("card_name", currentLanguage).take(2)}: ${card.title}")
+                    Text("${StringsProvider.get("expire_date", currentLanguage)}: $currentExpiryStr", color = Color.Gray, fontSize = 13.sp)
                     Text(
-                        "将基于提醒间隔 (${interval}天)，顺延更新到期日期为：",
+                        String.format(StringsProvider.get("confirm_update_desc", currentLanguage), interval),
                         fontSize = 13.sp
                     )
                     Text(
@@ -1026,16 +1346,16 @@ fun MainTabContainer() {
                         }
                         cardList = updatedList
                         CardStorage.saveCards(context, updatedList)
-                        Toast.makeText(context, "更新成功！新到期日：$nextExpiryStr", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "更新成功！", Toast.LENGTH_SHORT).show()
                         operateConfirmCard = null
                     }
                 ) {
-                    Text("确认更新")
+                    Text(StringsProvider.get("btn_confirm_update", currentLanguage))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { operateConfirmCard = null }) {
-                    Text("取消")
+                    Text(StringsProvider.get("cancel", currentLanguage))
                 }
             }
         )
@@ -1106,6 +1426,7 @@ fun MainTabContainer() {
 @Composable
 fun BatchManagementScreen(
     cardList: List<CardItem>,
+    currentLanguage: AppLanguage,
     onBack: () -> Unit,
     onUpdateCards: (List<CardItem>) -> Unit
 ) {
@@ -1249,7 +1570,7 @@ fun BatchManagementScreen(
                                     }
                                 }
                             }
-                            Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 12.sp, color = Color.Gray)
+                            Text("${StringsProvider.get("expire_date", currentLanguage)}: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 12.sp, color = Color.Gray)
                         }
                     }
                 }
@@ -1398,15 +1719,21 @@ fun BatchManagementScreen(
 }
 
 @Composable
-fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
-    val defaultCategories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
+fun CategorizedHomeScreen(cardList: List<CardItem>, currentLanguage: AppLanguage, onEdit: (CardItem) -> Unit) {
+    val defaultCategories = listOf(
+        StringsProvider.get("bank_card", currentLanguage),
+        StringsProvider.get("sim_card", currentLanguage),
+        StringsProvider.get("email", currentLanguage),
+        StringsProvider.get("account", currentLanguage),
+        StringsProvider.get("other", currentLanguage)
+    )
     val customCategories = cardList.map { it.category }.distinct().filter { !defaultCategories.contains(it) }
     val categories = defaultCategories + customCategories
     val now = System.currentTimeMillis()
 
     if (cardList.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("暂无卡片数据，点击底部“新增”添加", color = Color.Gray)
+            Text(StringsProvider.get("empty_data", currentLanguage), color = Color.Gray)
         }
     } else {
         LazyColumn(
@@ -1446,7 +1773,7 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(categoryCards) { card ->
-                                HorizontalCardItem(card = card, onClick = { onEdit(card) })
+                                HorizontalCardItem(card = card, currentLanguage = currentLanguage, onClick = { onEdit(card) })
                             }
                         }
                     }
@@ -1458,7 +1785,7 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
+fun HorizontalCardItem(card: CardItem, currentLanguage: AppLanguage, onClick: () -> Unit) {
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val now = System.currentTimeMillis()
     val diffDays = (card.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
@@ -1520,14 +1847,14 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
                             color = Color(0xFFE53935),
                             shape = RoundedCornerShape(4.dp)
                         ) {
-                            Text("已过期", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                            Text(StringsProvider.get("expired", currentLanguage), color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
                         }
                     } else if (diffDays <= 30) {
                         Surface(
                             color = if (diffDays <= 3) Color(0xFFE53935) else Color(0xFFFF9800),
                             shape = RoundedCornerShape(4.dp)
                         ) {
-                            Text("剩${diffDays}天", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                            Text(String.format(StringsProvider.get("days_left", currentLanguage), diffDays), color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1539,7 +1866,7 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
                 if (card.note.isNotBlank()) {
                     Text("备注: ${card.note}", fontSize = 11.sp, color = textColor.copy(alpha = 0.75f), maxLines = 1)
                 }
-                Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Bold)
+                Text("${StringsProvider.get("expire_date", currentLanguage)}: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1549,6 +1876,7 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
 fun ListScreen(
     displayList: List<CardItem>,
     searchQuery: String,
+    currentLanguage: AppLanguage,
     onSearchQueryChange: (String) -> Unit,
     onTogglePin: (CardItem) -> Unit,
     onLongClickPin: (CardItem) -> Unit,
@@ -1566,7 +1894,7 @@ fun ListScreen(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchQueryChange,
-            placeholder = { Text("搜索卡片名称 / 卡号 / 备注...") },
+            placeholder = { Text(StringsProvider.get("search_hint", currentLanguage)) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
@@ -1585,7 +1913,7 @@ fun ListScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             if (displayList.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("未找到相关卡片数据", color = Color.Gray)
+                    Text(StringsProvider.get("empty_data", currentLanguage), color = Color.Gray)
                 }
             } else {
                 LazyColumn(
@@ -1597,6 +1925,7 @@ fun ListScreen(
                     itemsIndexed(displayList, key = { _, item -> item.id }) { _, card ->
                         SwipeableCardItem(
                             card = card,
+                            currentLanguage = currentLanguage,
                             onTogglePin = { onTogglePin(card) },
                             onLongClickPin = { onLongClickPin(card) },
                             onEdit = { onEdit(card) },
@@ -1637,6 +1966,7 @@ fun ListScreen(
 @Composable
 fun SwipeableCardItem(
     card: CardItem,
+    currentLanguage: AppLanguage,
     onTogglePin: () -> Unit,
     onLongClickPin: () -> Unit,
     onEdit: () -> Unit,
@@ -1736,12 +2066,12 @@ fun SwipeableCardItem(
                             if (diffDays < 0) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(color = Color(0xFFE53935), shape = RoundedCornerShape(4.dp)) {
-                                    Text("已过期", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                                    Text(StringsProvider.get("expired", currentLanguage), color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
                                 }
                             } else if (diffDays <= 30) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(color = if (diffDays <= 3) Color(0xFFE53935) else Color(0xFFFF9800), shape = RoundedCornerShape(4.dp)) {
-                                    Text("剩${diffDays}天", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                                    Text(String.format(StringsProvider.get("days_left", currentLanguage), diffDays), color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -1777,7 +2107,7 @@ fun SwipeableCardItem(
                             ) {
                                 Icon(
                                     imageVector = if (isMasked) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
-                                    contentDescription = "显隐卡号",
+                                    contentDescription = null,
                                     tint = iconActionColor,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -1791,16 +2121,12 @@ fun SwipeableCardItem(
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = "复制卡号",
+                                    contentDescription = null,
                                     tint = iconActionColor,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
-                    }
-
-                    if (card.cost > 0.0) {
-                        Text("维护费用: ¥${card.cost} / ${card.costCycle}", fontSize = 12.sp, color = textColor.copy(alpha = 0.8f))
                     }
 
                     if (card.note.isNotBlank() || card.historyLogs.isNotEmpty()) {
@@ -1838,8 +2164,8 @@ fun SwipeableCardItem(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                            Text("提醒间隔: ${if(card.intervalDays > 0) "${card.intervalDays}天" else "不提醒"}", fontSize = 12.sp, color = textColor.copy(alpha = 0.82f))
+                            Text("${StringsProvider.get("expire_date", currentLanguage)}: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            Text("${StringsProvider.get("remind_interval", currentLanguage)}: ${if(card.intervalDays > 0) "${card.intervalDays}${StringsProvider.get("day", currentLanguage)}" else StringsProvider.get("no_remind", currentLanguage)}", fontSize = 12.sp, color = textColor.copy(alpha = 0.82f))
                         }
 
                         val updateBtnContainerColor = if (isDarkBg) Color.White else Color(0xFF1E88E5)
@@ -1856,7 +2182,7 @@ fun SwipeableCardItem(
                         ) {
                             Icon(Icons.Outlined.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("更新", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(StringsProvider.get("update", currentLanguage), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1869,14 +2195,22 @@ fun SwipeableCardItem(
 @Composable
 fun EditCardScreen(
     initialCard: CardItem?,
+    currentLanguage: AppLanguage,
     onSave: (CardItem) -> Unit
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    val presetCategories = remember { listOf("银行卡", "电话卡", "邮箱", "账号", "其他") }
+    val presetCategories = remember(currentLanguage) {
+        listOf(
+            StringsProvider.get("bank_card", currentLanguage),
+            StringsProvider.get("sim_card", currentLanguage),
+            StringsProvider.get("email", currentLanguage),
+            StringsProvider.get("account", currentLanguage),
+            StringsProvider.get("other", currentLanguage)
+        )
+    }
     val presetIntervals = remember { listOf(0, 3, 7, 15, 30) }
-    val costCycles = remember { listOf("每年", "每月", "一次性") }
 
     val presetColors = remember {
         listOf(
@@ -1891,9 +2225,6 @@ fun EditCardScreen(
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var note by remember { mutableStateOf(initialCard?.note ?: "") }
-    
-    var costInput by remember { mutableStateOf(if ((initialCard?.cost ?: 0.0) > 0) initialCard!!.cost.toString() else "") }
-    var costCycle by remember { mutableStateOf(initialCard?.costCycle ?: "每年") }
     var syncCalendar by remember { mutableStateOf(initialCard?.syncCalendar ?: false) }
 
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: presetCategories[0]) }
@@ -1960,7 +2291,7 @@ fun EditCardScreen(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("名称 (如: 招商信用卡)") },
+                label = { Text(StringsProvider.get("card_name", currentLanguage)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1968,38 +2299,15 @@ fun EditCardScreen(
             OutlinedTextField(
                 value = cardNumber,
                 onValueChange = { cardNumber = it },
-                label = { Text("卡号 / 账号 (选填)") },
+                label = { Text(StringsProvider.get("card_number", currentLanguage)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = costInput,
-                    onValueChange = { costInput = it },
-                    label = { Text("维护费用 (选填)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("周期", fontSize = 12.sp, color = Color.Gray)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        costCycles.forEach { cycle ->
-                            FilterChip(
-                                selected = costCycle == cycle,
-                                onClick = { costCycle = cycle },
-                                label = { Text(cycle, fontSize = 11.sp) }
-                            )
-                        }
-                    }
-                }
-            }
-
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
-                label = { Text("备注信息 (选填)") },
+                label = { Text(StringsProvider.get("note", currentLanguage)) },
                 minLines = 2,
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth()
@@ -2008,10 +2316,10 @@ fun EditCardScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = syncCalendar, onCheckedChange = { syncCalendar = it })
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("同时自动同步到手机系统日历日程", fontSize = 13.sp)
+                Text(StringsProvider.get("sync_calendar", currentLanguage), fontSize = 13.sp)
             }
 
-            Text("卡片分类:", fontSize = 13.sp, color = Color.Gray)
+            Text(StringsProvider.get("category", currentLanguage), fontSize = 13.sp, color = Color.Gray)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -2029,7 +2337,7 @@ fun EditCardScreen(
                 FilterChip(
                     selected = isCustomCategory,
                     onClick = { isCustomCategory = true },
-                    label = { Text("自定义分类") }
+                    label = { Text(StringsProvider.get("custom_category", currentLanguage)) }
                 )
             }
 
@@ -2037,13 +2345,13 @@ fun EditCardScreen(
                 OutlinedTextField(
                     value = customCategoryInput,
                     onValueChange = { customCategoryInput = it },
-                    label = { Text("输入自定义分类 (如: 会员卡/公积金)") },
+                    label = { Text(StringsProvider.get("custom_category_hint", currentLanguage)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            Text("自定义背景样式:", fontSize = 13.sp, color = Color.Gray)
+            Text(StringsProvider.get("custom_bg", currentLanguage), fontSize = 13.sp, color = Color.Gray)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2074,11 +2382,11 @@ fun EditCardScreen(
                 ) {
                     Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (bgType == "URI") "已选相册图片" else "选择相册", fontSize = 12.sp)
+                    Text(if (bgType == "URI") StringsProvider.get("photo_selected", currentLanguage) else StringsProvider.get("select_photo", currentLanguage), fontSize = 12.sp)
                 }
             }
 
-            Text("到期日期:", fontSize = 13.sp, color = Color.Gray)
+            Text(StringsProvider.get("expire_date_label", currentLanguage), fontSize = 13.sp, color = Color.Gray)
             OutlinedCard(
                 onClick = { datePickerDialog.show() },
                 modifier = Modifier.fillMaxWidth()
@@ -2100,7 +2408,7 @@ fun EditCardScreen(
                 }
             }
 
-            Text("提醒/续期间隔天数:", fontSize = 13.sp, color = Color.Gray)
+            Text(StringsProvider.get("remind_interval_label", currentLanguage), fontSize = 13.sp, color = Color.Gray)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -2111,13 +2419,13 @@ fun EditCardScreen(
                             isCustomInterval = false
                             selectedInterval = days
                         },
-                        label = { Text(if (days == 0) "不提醒" else "${days}天") }
+                        label = { Text(if (days == 0) StringsProvider.get("no_remind", currentLanguage) else "${days}${StringsProvider.get("day", currentLanguage)}") }
                     )
                 }
                 FilterChip(
                     selected = isCustomInterval,
                     onClick = { isCustomInterval = true },
-                    label = { Text("自定义") }
+                    label = { Text(StringsProvider.get("custom_interval", currentLanguage)) }
                 )
             }
 
@@ -2125,7 +2433,7 @@ fun EditCardScreen(
                 OutlinedTextField(
                     value = customIntervalInput,
                     onValueChange = { customIntervalInput = it.filter { char -> char.isDigit() } },
-                    label = { Text("输入自定义间隔天数 (如: 60)") },
+                    label = { Text(StringsProvider.get("custom_interval_hint", currentLanguage)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
@@ -2167,8 +2475,6 @@ fun EditCardScreen(
                         pinTime = initialCard?.pinTime ?: 0L,
                         bgType = bgType,
                         bgValue = bgValue,
-                        cost = costInput.toDoubleOrNull() ?: 0.0,
-                        costCycle = costCycle,
                         syncCalendar = syncCalendar,
                         historyLogs = initialCard?.historyLogs ?: emptyList()
                     )
@@ -2176,7 +2482,7 @@ fun EditCardScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("保存卡片信息", fontSize = 16.sp)
+                Text(StringsProvider.get("save_card", currentLanguage), fontSize = 16.sp)
             }
         }
     }
@@ -2186,8 +2492,10 @@ fun EditCardScreen(
 @Composable
 fun ProfileScreen(
     currentTheme: AppTheme,
-    cardList: List<CardItem>,
+    currentLanguage: AppLanguage,
+    cardCount: Int,
     onThemeChanged: (AppTheme) -> Unit,
+    onLanguageChanged: (AppLanguage) -> Unit,
     onBatchManageClick: () -> Unit,
     onExportClick: () -> Unit,
     onExportTemplateClick: () -> Unit,
@@ -2205,18 +2513,6 @@ fun ProfileScreen(
             val parsedCards = ExcelExportImportHelper.parseCsvFromUri(context, it)
             onImportFileParsed(parsedCards)
         }
-    }
-
-    val (annualTotal, monthlyAvg) = remember(cardList) {
-        var total = 0.0
-        cardList.forEach {
-            when (it.costCycle) {
-                "每年" -> total += it.cost
-                "每月" -> total += it.cost * 12
-                "一次性" -> total += it.cost
-            }
-        }
-        Pair(total, total / 12.0)
     }
 
     Column(
@@ -2252,29 +2548,11 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v4.0", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text("已安全管理 ${cardList.size} 张卡片", color = Color.Gray, fontSize = 13.sp)
+            Text("卡片提醒助手 v4.1", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("已安全管理 $cardCount 张卡片", color = Color.Gray, fontSize = 13.sp)
         }
 
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("📊 维护与续费支出看板", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text("年均维护支出预估", fontSize = 12.sp, color = Color.Gray)
-                        Text(String.format("¥ %.2f", annualTotal), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("月均均摊支出", fontSize = 12.sp, color = Color.Gray)
-                        Text(String.format("¥ %.2f", monthlyAvg), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF26A69A))
-                    }
-                }
-            }
-        }
-
+        // 批量管理入口
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2296,14 +2574,15 @@ fun ProfileScreen(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("卡片批量整理与管理", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text("多选、批量删除、批量改分类及批量顺延", fontSize = 12.sp, color = Color.Gray)
+                        Text(StringsProvider.get("batch_manage", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(StringsProvider.get("batch_manage_desc", currentLanguage), fontSize = 12.sp, color = Color.Gray)
                     }
                 }
                 Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
             }
         }
 
+        // 安全与隐私设置
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2316,8 +2595,8 @@ fun ProfileScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("应用生物识别锁 (指纹/面容)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text("开启后启动应用需进行身份验证", fontSize = 12.sp, color = Color.Gray)
+                    Text(StringsProvider.get("biometric_title", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(StringsProvider.get("biometric_desc", currentLanguage), fontSize = 12.sp, color = Color.Gray)
                 }
                 Switch(
                     checked = biometricEnabled,
@@ -2329,6 +2608,7 @@ fun ProfileScreen(
             }
         }
 
+        // 表格导入导出与备份
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2339,7 +2619,7 @@ fun ProfileScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("数据备份与表格导入导出", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(StringsProvider.get("data_backup", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(
                     if (lastExportTime != null) "上次导出备份时间: $lastExportTime" else "支持与 Excel (.csv) 格式交互，建议定期备份",
                     fontSize = 12.sp,
@@ -2357,7 +2637,7 @@ fun ProfileScreen(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("导出表格")
+                        Text(StringsProvider.get("export_csv", currentLanguage))
                     }
 
                     OutlinedButton(
@@ -2366,7 +2646,7 @@ fun ProfileScreen(
                     ) {
                         Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("导入表格")
+                        Text(StringsProvider.get("import_csv", currentLanguage))
                     }
                 }
 
@@ -2380,7 +2660,7 @@ fun ProfileScreen(
                     ) {
                         Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("下载导入模板", fontSize = 12.sp)
+                        Text(StringsProvider.get("download_template", currentLanguage), fontSize = 12.sp)
                     }
 
                     OutlinedButton(
@@ -2389,12 +2669,13 @@ fun ProfileScreen(
                     ) {
                         Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("恢复上次备份", fontSize = 12.sp)
+                        Text(StringsProvider.get("restore_backup", currentLanguage), fontSize = 12.sp)
                     }
                 }
             }
         }
 
+        // 多语言设置
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2405,7 +2686,40 @@ fun ProfileScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("软件外观主题设置", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(StringsProvider.get("lang_setting", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    AppLanguage.values().forEach { lang ->
+                        FilterChip(
+                            selected = currentLanguage == lang,
+                            onClick = { onLanguageChanged(lang) },
+                            label = { Text(lang.displayName) },
+                            leadingIcon = {
+                                if (currentLanguage == lang) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // 外观主题
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(StringsProvider.get("theme_setting", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
