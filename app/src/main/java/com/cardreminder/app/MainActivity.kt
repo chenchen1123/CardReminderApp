@@ -135,7 +135,7 @@ data class CardItem(
     val bgType: String = "COLOR",
     val bgValue: String = "0xFFFFFFFF",
     val cost: Double = 0.0,
-    val costCycle: String = "每年", // 每年 / 每月 / 一次性
+    val costCycle: String = "每年",
     val syncCalendar: Boolean = false,
     val historyLogs: List<String> = emptyList()
 )
@@ -294,7 +294,6 @@ object CardStorage {
     }
 }
 
-// 日历事件同步工具
 object CalendarSyncHelper {
     fun syncEventToCalendar(context: Context, card: CardItem) {
         if (!card.syncCalendar) return
@@ -319,7 +318,7 @@ object CalendarSyncHelper {
                     val reminderValues = ContentValues().apply {
                         put(CalendarContract.Reminders.EVENT_ID, eventId)
                         put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
-                        put(CalendarContract.Reminders.MINUTES, 24 * 60) // 提前1天提醒
+                        put(CalendarContract.Reminders.MINUTES, 24 * 60)
                     }
                     context.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminderValues)
                 }
@@ -564,7 +563,6 @@ fun MainTabContainer() {
     var importPendingCards by remember { mutableStateOf<List<CardItem>?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
 
-    // 生物识别应用锁检查
     var isUnlocked by remember { mutableStateOf(!CardStorage.isBiometricEnabled(context)) }
 
     LaunchedEffect(Unit) {
@@ -1609,7 +1607,7 @@ fun ListScreen(
                 }
             }
 
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = showScrollToTop,
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut(),
@@ -1648,7 +1646,7 @@ fun SwipeableCardItem(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var expandedNote by remember { mutableStateOf(false) }
-    var isMasked by remember { mutableStateOf(true) } // 卡号脱敏状态
+    var isMasked by remember { mutableStateOf(true) }
 
     val now = System.currentTimeMillis()
     val diffDays = (card.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
@@ -1807,7 +1805,7 @@ fun SwipeableCardItem(
 
                     if (card.note.isNotBlank() || card.historyLogs.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        AnimatedVisibility(visible = expandedNote) {
+                        androidx.compose.animation.AnimatedVisibility(visible = expandedNote) {
                             Surface(
                                 color = if (isDarkBg) Color.Black.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.9f),
                                 shape = RoundedCornerShape(6.dp),
@@ -2209,7 +2207,6 @@ fun ProfileScreen(
         }
     }
 
-    // 统计年度总支出与月度均摊支出
     val (annualTotal, monthlyAvg) = remember(cardList) {
         var total = 0.0
         cardList.forEach {
@@ -2259,7 +2256,6 @@ fun ProfileScreen(
             Text("已安全管理 ${cardList.size} 张卡片", color = Color.Gray, fontSize = 13.sp)
         }
 
-        // 维护费用支出统计看板
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2279,7 +2275,6 @@ fun ProfileScreen(
             }
         }
 
-        // 批量管理入口
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2309,7 +2304,6 @@ fun ProfileScreen(
             }
         }
 
-        // 安全与隐私设置
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2335,7 +2329,6 @@ fun ProfileScreen(
             }
         }
 
-        // 表格导入导出与备份
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2402,7 +2395,6 @@ fun ProfileScreen(
             }
         }
 
-        // 外观主题
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
