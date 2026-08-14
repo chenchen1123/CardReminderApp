@@ -3,7 +3,6 @@ package com.cardreminder.app
 import android.Manifest
 import android.app.DatePickerDialog
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -104,7 +103,7 @@ data class CardItem(
     val category: String,
     val note: String = "",
     val expiryDateMillis: Long,
-    val intervalDays: Int = 30, // 提醒/续期间隔天数
+    val intervalDays: Int = 30,
     val isPinned: Boolean = false,
     val pinTime: Long = 0L,
     val bgType: String = "COLOR",
@@ -226,7 +225,7 @@ fun MainTabContainer() {
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
     var pinDialogCard by remember { mutableStateOf<CardItem?>(null) }
-    var operateConfirmCard by remember { mutableStateOf<CardItem?>(null) } // 已操作确认弹窗
+    var operateConfirmCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -455,7 +454,6 @@ fun MainTabContainer() {
         }
     }
 
-    // “已操作”确认并自动更新到期日期弹窗
     if (operateConfirmCard != null) {
         val card = operateConfirmCard!!
         val interval = card.intervalDays
@@ -860,7 +858,6 @@ fun SwipeableCardItem(
                             Text("提醒间隔: ${if(card.intervalDays > 0) "${card.intervalDays}天" else "不提醒"}", fontSize = 12.sp, color = textColor.copy(alpha = 0.8f))
                         }
 
-                        // 一键已操作更新按钮
                         Button(
                             onClick = onOperated,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26A69A)),
@@ -915,7 +912,6 @@ fun EditCardScreen(
     var selectedMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH) + 1) }
     var selectedDay by remember { mutableIntStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
 
-    // 提醒间隔逻辑：包含预设 + 自定义天数
     var selectedInterval by remember { mutableIntStateOf(initialCard?.intervalDays ?: 30) }
     var isCustomInterval by remember { mutableStateOf(!presetIntervals.contains(initialCard?.intervalDays ?: 30)) }
     var customIntervalInput by remember { mutableStateOf(if (isCustomInterval) (initialCard?.intervalDays ?: 30).toString() else "") }
