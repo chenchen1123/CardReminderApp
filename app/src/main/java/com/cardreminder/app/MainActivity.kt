@@ -2,12 +2,16 @@ package com.cardreminder.app
 
 import android.Manifest
 import android.app.DatePickerDialog
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.biometrics.BiometricPrompt
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.provider.CalendarContract
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -17,6 +21,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -29,6 +37,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,11 +45,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Checklist
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,9 +57,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -63,6 +70,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -78,7 +86,11 @@ enum class AppTheme(val displayName: String, val isDynamic: Boolean) {
     DEFAULT("默认明亮", false),
     DARK("深色夜间", false),
     OCEAN("静谧海洋", false),
-    DYNAMIC_GRADIENT("动态炫彩", true)
+    DYNAMIC_GRADIENT("动态炫彩 ✨", true),
+    STAR_DEEP_SPACE("深空星海 🌌", false),
+    STAR_AURORA("极光星穹 ✨", true),
+    ANIME_SAKURA("落樱物语 🌸", true),
+    ANIME_CYBER("赛博霓虹 ⚡", false)
 }
 
 fun parseColorHex(hexString: String): Color {
@@ -121,7 +133,11 @@ data class CardItem(
     val isPinned: Boolean = false,
     val pinTime: Long = 0L,
     val bgType: String = "COLOR",
-    val bgValue: String = "0xFFFFFFFF"
+    val bgValue: String = "0xFFFFFFFF",
+    val cost: Double = 0.0,
+    val costCycle: String = "每年", // 每年 / 每月 / 一次性
+    val syncCalendar: Boolean = false,
+    val historyLogs: List<String> = emptyList()
 )
 
 object CardStorage {
@@ -131,6 +147,7 @@ object CardStorage {
     private const val KEY_BACKUP_TIME = "key_backup_time"
     private const val KEY_LAST_EXPORT_TIME = "key_last_export_time"
     private const val KEY_THEME = "key_app_theme"
+    private const val KEY_BIOMETRIC_ENABLED = "key_biometric_enabled"
 
     fun saveCards(context: Context, cards: List<CardItem>) {
         val jsonArray = JSONArray()
@@ -147,6 +164,12 @@ object CardStorage {
                 put("pinTime", card.pinTime)
                 put("bgType", card.bgType)
                 put("bgValue", card.bgValue)
+                put("cost", card.cost)
+                put("costCycle", card.costCycle)
+                put("syncCalendar", card.syncCalendar)
+                val logArray = JSONArray()
+                card.historyLogs.forEach { logArray.put(it) }
+                put("historyLogs", logArray)
             }
             jsonArray.put(obj)
         }
@@ -175,6 +198,12 @@ object CardStorage {
                 put("pinTime", card.pinTime)
                 put("bgType", card.bgType)
                 put("bgValue", card.bgValue)
+                put("cost", card.cost)
+                put("costCycle", card.costCycle)
+                put("syncCalendar", card.syncCalendar)
+                val logArray = JSONArray()
+                card.historyLogs.forEach { logArray.put(it) }
+                put("historyLogs", logArray)
             }
             jsonArray.put(obj)
         }
@@ -210,6 +239,13 @@ object CardStorage {
             val jsonArray = JSONArray(jsonStr)
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
+                val logs = mutableListOf<String>()
+                val logArray = obj.optJSONArray("historyLogs")
+                if (logArray != null) {
+                    for (j in 0 until logArray.length()) {
+                        logs.add(logArray.getString(j))
+                    }
+                }
                 list.add(
                     CardItem(
                         id = obj.optString("id", UUID.randomUUID().toString()),
@@ -222,7 +258,11 @@ object CardStorage {
                         isPinned = obj.optBoolean("isPinned", false),
                         pinTime = obj.optLong("pinTime", 0L),
                         bgType = obj.optString("bgType", "COLOR"),
-                        bgValue = obj.optString("bgValue", "0xFFFFFFFF")
+                        bgValue = obj.optString("bgValue", "0xFFFFFFFF"),
+                        cost = obj.optDouble("cost", 0.0),
+                        costCycle = obj.optString("costCycle", "每年"),
+                        syncCalendar = obj.optBoolean("syncCalendar", false),
+                        historyLogs = logs
                     )
                 )
             }
@@ -242,6 +282,66 @@ object CardStorage {
         val name = sp.getString(KEY_THEME, AppTheme.DEFAULT.name)
         return try { AppTheme.valueOf(name!!) } catch (e: Exception) { AppTheme.DEFAULT }
     }
+
+    fun setBiometricEnabled(context: Context, enabled: Boolean) {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        sp.edit().putBoolean(KEY_BIOMETRIC_ENABLED, enabled).apply()
+    }
+
+    fun isBiometricEnabled(context: Context): Boolean {
+        val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        return sp.getBoolean(KEY_BIOMETRIC_ENABLED, false)
+    }
+}
+
+// 日历事件同步工具
+object CalendarSyncHelper {
+    fun syncEventToCalendar(context: Context, card: CardItem) {
+        if (!card.syncCalendar) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        try {
+            val calId = getDefaultCalendarId(context) ?: return
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.DTSTART, card.expiryDateMillis)
+                put(CalendarContract.Events.DTEND, card.expiryDateMillis + 60 * 60 * 1000)
+                put(CalendarContract.Events.TITLE, "【到期提醒】${card.title}")
+                put(CalendarContract.Events.DESCRIPTION, "卡号: ${card.cardNumber}\n备注: ${card.note}")
+                put(CalendarContract.Events.CALENDAR_ID, calId)
+                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                put(CalendarContract.Events.HAS_ALARM, 1)
+            }
+            val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+            if (uri != null) {
+                val eventId = uri.lastPathSegment?.toLongOrNull()
+                if (eventId != null) {
+                    val reminderValues = ContentValues().apply {
+                        put(CalendarContract.Reminders.EVENT_ID, eventId)
+                        put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+                        put(CalendarContract.Reminders.MINUTES, 24 * 60) // 提前1天提醒
+                    }
+                    context.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminderValues)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun getDefaultCalendarId(context: Context): Long? {
+        val projection = arrayOf(CalendarContract.Calendars._ID)
+        val cursor = context.contentResolver.query(
+            CalendarContract.Calendars.CONTENT_URI,
+            projection,
+            null,
+            null,
+            null
+        )
+        return cursor?.use {
+            if (it.moveToFirst()) it.getLong(0) else null
+        }
+    }
 }
 
 object ExcelExportImportHelper {
@@ -256,7 +356,7 @@ object ExcelExportImportHelper {
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
             val writer = outputStream.bufferedWriter(Charsets.UTF_8)
-            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
+            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,维护费用,费用周期,备注\n")
 
             cards.forEach { card ->
                 val dateStr = sdf.format(Date(card.expiryDateMillis))
@@ -265,6 +365,8 @@ object ExcelExportImportHelper {
                            "\"${card.category.replace("\"", "\"\"")}\"," +
                            "\"$dateStr\"," +
                            "${card.intervalDays}," +
+                           "${card.cost}," +
+                           "\"${card.costCycle}\"," +
                            "\"${card.note.replace("\"", "\"\"")}\"\n"
                 writer.write(line)
             }
@@ -296,9 +398,9 @@ object ExcelExportImportHelper {
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
             val writer = outputStream.bufferedWriter(Charsets.UTF_8)
-            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
-            writer.write("\"招商银行信用卡\",\"6225888899990000\",\"银行卡\",\"2026-12-31\",30,\"每月账单日5号\"\n")
-            writer.write("\"香港手机卡\",\"+852 98765432\",\"电话卡\",\"2026-10-15\",180,\"需每半年发一条短信保号\"\n")
+            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,维护费用,费用周期,备注\n")
+            writer.write("\"招商银行信用卡\",\"6225888899990000\",\"银行卡\",\"2026-12-31\",30,0.0,\"每年\",\"每月账单日5号\"\n")
+            writer.write("\"香港手机卡\",\"+852 98765432\",\"电话卡\",\"2026-10-15\",180,6.0,\"每年\",\"需每半年发一条短信保号\"\n")
             writer.flush()
             writer.close()
 
@@ -338,7 +440,9 @@ object ExcelExportImportHelper {
                     val category = tokens.getOrNull(2) ?: "其他"
                     val dateStr = tokens.getOrNull(3) ?: ""
                     val interval = tokens.getOrNull(4)?.toIntOrNull() ?: 30
-                    val note = tokens.getOrNull(5) ?: ""
+                    val cost = tokens.getOrNull(5)?.toDoubleOrNull() ?: 0.0
+                    val costCycle = tokens.getOrNull(6) ?: "每年"
+                    val note = tokens.getOrNull(7) ?: ""
 
                     val dateMillis = try {
                         sdf.parse(dateStr)?.time ?: System.currentTimeMillis()
@@ -353,6 +457,8 @@ object ExcelExportImportHelper {
                             category = category,
                             expiryDateMillis = dateMillis,
                             intervalDays = interval,
+                            cost = cost,
+                            costCycle = costCycle,
                             note = note
                         )
                     )
@@ -423,6 +529,8 @@ class MainActivity : ComponentActivity() {
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
+        permissions.add(Manifest.permission.READ_CALENDAR)
+        permissions.add(Manifest.permission.WRITE_CALENDAR)
 
         val neededPermissions = permissions.filter {
             ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
@@ -443,6 +551,7 @@ fun MainTabContainer() {
     var cardList by remember { mutableStateOf(CardStorage.loadCards(context)) }
     var currentTheme by remember { mutableStateOf(CardStorage.loadTheme(context)) }
 
+    var searchQuery by remember { mutableStateOf("") }
     var selectedCategoryFilter by remember { mutableStateOf("全部") }
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
@@ -455,27 +564,89 @@ fun MainTabContainer() {
     var importPendingCards by remember { mutableStateOf<List<CardItem>?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
 
+    // 生物识别应用锁检查
+    var isUnlocked by remember { mutableStateOf(!CardStorage.isBiometricEnabled(context)) }
+
+    LaunchedEffect(Unit) {
+        if (CardStorage.isBiometricEnabled(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val biometricPrompt = BiometricPrompt.Builder(context)
+                .setTitle("身份验证")
+                .setSubtitle("请验证指纹或面容进入卡片管理")
+                .setNegativeButton("取消", context.mainExecutor) { _, _ -> }
+                .build()
+
+            biometricPrompt.authenticate(
+                CancellationSignal(),
+                context.mainExecutor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                        super.onAuthenticationSucceeded(result)
+                        isUnlocked = true
+                    }
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                        super.onAuthenticationError(errorCode, errString)
+                    }
+                }
+            )
+        }
+    }
+
+    if (!isUnlocked) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+                Text("应用已锁定，请验证身份", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Button(onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        val prompt = BiometricPrompt.Builder(context)
+                            .setTitle("身份验证")
+                            .setNegativeButton("取消", context.mainExecutor) { _, _ -> }
+                            .build()
+                        prompt.authenticate(CancellationSignal(), context.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+                            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                                isUnlocked = true
+                            }
+                        })
+                    }
+                }) {
+                    Text("点击验证指纹/面容")
+                }
+            }
+        }
+        return
+    }
+
     val allCategories = remember(cardList) {
         val defaultList = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
         val customList = cardList.map { it.category }.distinct().filter { !defaultList.contains(it) }
         defaultList + customList
     }
 
-    val displayList = remember(cardList, selectedCategoryFilter, currentSortOrder) {
-        cardList.filter { selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter }
-            .sortedWith { a, b ->
-                if (a.isPinned != b.isPinned) {
-                    if (a.isPinned) -1 else 1
-                } else if (a.isPinned && b.isPinned) {
-                    b.pinTime.compareTo(a.pinTime)
+    val now = System.currentTimeMillis()
+    val displayList = remember(cardList, searchQuery, selectedCategoryFilter, currentSortOrder) {
+        val filtered = cardList.filter {
+            (selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter) &&
+            (searchQuery.isBlank() || it.title.contains(searchQuery, true) || it.cardNumber.contains(searchQuery, true) || it.note.contains(searchQuery, true))
+        }
+        filtered.sortedWith { a, b ->
+            if (a.isPinned != b.isPinned) {
+                if (a.isPinned) -1 else 1
+            } else if (a.isPinned && b.isPinned) {
+                b.pinTime.compareTo(a.pinTime)
+            } else {
+                val aUrgent = (a.expiryDateMillis - now) <= 30L * 24 * 60 * 60 * 1000L
+                val bUrgent = (b.expiryDateMillis - now) <= 30L * 24 * 60 * 60 * 1000L
+                if (aUrgent != bUrgent) {
+                    if (aUrgent) -1 else 1
                 } else {
                     when (currentSortOrder) {
                         SortOrder.EXPIRY_ASC -> a.expiryDateMillis.compareTo(b.expiryDateMillis)
                         SortOrder.EXPIRY_DESC -> b.expiryDateMillis.compareTo(a.expiryDateMillis)
-                        SortOrder.NONE -> 0
+                        SortOrder.NONE -> a.expiryDateMillis.compareTo(b.expiryDateMillis)
                     }
                 }
             }
+        }
     }
 
     val dynamicBrush = if (currentTheme.isDynamic) {
@@ -489,34 +660,33 @@ fun MainTabContainer() {
             ),
             label = "offset"
         )
-        Brush.linearGradient(
-            colors = listOf(
-                Color(0xFFE0F7FA),
-                Color(0xFFE8EAF6),
-                Color(0xFFF3E5F5),
-                Color(0xFFE1F5FE)
-            ),
-            start = Offset(animatedOffset, 0f),
-            end = Offset(0f, animatedOffset)
-        )
+        when (currentTheme) {
+            AppTheme.STAR_AURORA -> Brush.linearGradient(
+                colors = listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364), Color(0xFF00E5FF)),
+                start = Offset(animatedOffset, 0f),
+                end = Offset(0f, animatedOffset)
+            )
+            AppTheme.ANIME_SAKURA -> Brush.linearGradient(
+                colors = listOf(Color(0xFFFFF0F5), Color(0xFFFFE4E1), Color(0xFFFFD1DC), Color(0xFFFFF5F7)),
+                start = Offset(animatedOffset, 0f),
+                end = Offset(0f, animatedOffset)
+            )
+            else -> Brush.linearGradient(
+                colors = listOf(Color(0xFFE0F7FA), Color(0xFFE8EAF6), Color(0xFFF3E5F5), Color(0xFFE1F5FE)),
+                start = Offset(animatedOffset, 0f),
+                end = Offset(0f, animatedOffset)
+            )
+        }
     } else null
 
     val colorScheme = when (currentTheme) {
-        AppTheme.DARK -> darkColorScheme(
-            background = Color(0xFF121212),
-            surface = Color(0xFF1E1E1E)
-        )
-        AppTheme.OCEAN -> lightColorScheme(
-            primary = Color(0xFF006699),
-            background = Color(0xFFEBF3F5),
-            surface = Color.White
-        )
-        else -> lightColorScheme(
-            primary = Color(0xFF1E88E5),
-            secondary = Color(0xFF26A69A),
-            background = Color(0xFFF5F7FA),
-            surface = Color.White
-        )
+        AppTheme.DARK -> darkColorScheme(background = Color(0xFF121212), surface = Color(0xFF1E1E1E))
+        AppTheme.OCEAN -> lightColorScheme(primary = Color(0xFF006699), background = Color(0xFFEBF3F5), surface = Color.White)
+        AppTheme.STAR_DEEP_SPACE -> darkColorScheme(primary = Color(0xFF7C4DFF), secondary = Color(0xFF00E5FF), background = Color(0xFF0B0F19), surface = Color(0xFF161B2A))
+        AppTheme.STAR_AURORA -> darkColorScheme(primary = Color(0xFF00E5FF), secondary = Color(0xFF69F0AE), background = Color(0xFF0F2027), surface = Color(0xFF1B2E37))
+        AppTheme.ANIME_SAKURA -> lightColorScheme(primary = Color(0xFFFF4081), secondary = Color(0xFFFF80AB), background = Color(0xFFFFF5F7), surface = Color.White)
+        AppTheme.ANIME_CYBER -> darkColorScheme(primary = Color(0xFFFFEA00), secondary = Color(0xFF00E5FF), background = Color(0xFF101010), surface = Color(0xFF1D1D1D))
+        else -> lightColorScheme(primary = Color(0xFF1E88E5), secondary = Color(0xFF26A69A), background = Color(0xFFF5F7FA), surface = Color.White)
     }
 
     MaterialTheme(colorScheme = colorScheme) {
@@ -525,7 +695,7 @@ fun MainTabContainer() {
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = if (currentTheme == AppTheme.DARK) Color(0xFF1E1E1E) else Color.White.copy(alpha = 0.85f)
+                        containerColor = if (currentTheme == AppTheme.DARK || currentTheme == AppTheme.STAR_DEEP_SPACE || currentTheme == AppTheme.ANIME_CYBER) Color(0xFF1E1E1E).copy(alpha = 0.9f) else Color.White.copy(alpha = 0.85f)
                     ),
                     title = {
                         Text(
@@ -593,7 +763,7 @@ fun MainTabContainer() {
             bottomBar = {
                 if (!isBatchManaging) {
                     NavigationBar(
-                        containerColor = if (currentTheme == AppTheme.DARK) Color(0xFF1E1E1E) else Color.White,
+                        containerColor = if (currentTheme == AppTheme.DARK || currentTheme == AppTheme.STAR_DEEP_SPACE || currentTheme == AppTheme.ANIME_CYBER) Color(0xFF1E1E1E) else Color.White,
                         tonalElevation = 8.dp
                     ) {
                         NavigationBarItem(
@@ -654,6 +824,8 @@ fun MainTabContainer() {
                         })
                         1 -> ListScreen(
                             displayList = displayList,
+                            searchQuery = searchQuery,
+                            onSearchQueryChange = { searchQuery = it },
                             onTogglePin = { card ->
                                 val newList = cardList.map {
                                     if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
@@ -681,6 +853,7 @@ fun MainTabContainer() {
                                 val updatedList = cardList.filter { it.id != newCard.id } + newCard
                                 cardList = updatedList
                                 CardStorage.saveCards(context, updatedList)
+                                CalendarSyncHelper.syncEventToCalendar(context, newCard)
 
                                 editingCard = null
                                 selectedTab = 1
@@ -689,7 +862,7 @@ fun MainTabContainer() {
                         )
                         3 -> ProfileScreen(
                             currentTheme = currentTheme,
-                            cardCount = cardList.size,
+                            cardList = cardList,
                             onThemeChanged = { newTheme ->
                                 currentTheme = newTheme
                                 CardStorage.saveTheme(context, newTheme)
@@ -839,9 +1012,16 @@ fun MainTabContainer() {
             confirmButton = {
                 Button(
                     onClick = {
+                        val logTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+                        val newLog = "$logTime 顺延 ${if (interval > 0) interval else 30} 天至 $nextExpiryStr"
                         val updatedList = cardList.map { item ->
                             if (item.id == card.id) {
-                                item.copy(expiryDateMillis = nextCalendar.timeInMillis)
+                                val updatedCard = item.copy(
+                                    expiryDateMillis = nextCalendar.timeInMillis,
+                                    historyLogs = listOf(newLog) + item.historyLogs
+                                )
+                                CalendarSyncHelper.syncEventToCalendar(context, updatedCard)
+                                updatedCard
                             } else {
                                 item
                             }
@@ -1241,7 +1421,7 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
                 if (categoryCards.isNotEmpty()) {
                     val urgentCount = categoryCards.count {
                         val diffDays = (it.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
-                        diffDays <= 3
+                        diffDays <= 30
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1257,9 +1437,9 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = if (urgentCount > 0) "共 ${categoryCards.size} 张 · ${urgentCount}张待处理" else "共 ${categoryCards.size} 张",
+                                text = if (urgentCount > 0) "共 ${categoryCards.size} 张 · ${urgentCount}张需处理" else "共 ${categoryCards.size} 张",
                                 fontSize = 12.sp,
-                                color = if (urgentCount > 0) Color(0xFFE53935) else Color.Gray,
+                                color = if (urgentCount > 0) Color(0xFFFF9800) else Color.Gray,
                                 fontWeight = if (urgentCount > 0) FontWeight.Bold else FontWeight.Normal
                             )
                         }
@@ -1344,9 +1524,9 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
                         ) {
                             Text("已过期", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
                         }
-                    } else if (diffDays <= 3) {
+                    } else if (diffDays <= 30) {
                         Surface(
-                            color = Color(0xFFFF9800),
+                            color = if (diffDays <= 3) Color(0xFFE53935) else Color(0xFFFF9800),
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text("剩${diffDays}天", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
@@ -1370,31 +1550,86 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
 @Composable
 fun ListScreen(
     displayList: List<CardItem>,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     onTogglePin: (CardItem) -> Unit,
     onLongClickPin: (CardItem) -> Unit,
     onEdit: (CardItem) -> Unit,
     onOperated: (CardItem) -> Unit,
     onDeleteRequest: (CardItem) -> Unit
 ) {
-    if (displayList.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("暂无卡片数据，点击底部“新增”添加", color = Color.Gray)
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            itemsIndexed(displayList, key = { _, item -> item.id }) { _, card ->
-                SwipeableCardItem(
-                    card = card,
-                    onTogglePin = { onTogglePin(card) },
-                    onLongClickPin = { onLongClickPin(card) },
-                    onEdit = { onEdit(card) },
-                    onOperated = { onOperated(card) },
-                    onDelete = { onDeleteRequest(card) }
-                )
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val showScrollToTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            placeholder = { Text("搜索卡片名称 / 卡号 / 备注...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = null)
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (displayList.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("未找到相关卡片数据", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    itemsIndexed(displayList, key = { _, item -> item.id }) { _, card ->
+                        SwipeableCardItem(
+                            card = card,
+                            onTogglePin = { onTogglePin(card) },
+                            onLongClickPin = { onLongClickPin(card) },
+                            onEdit = { onEdit(card) },
+                            onOperated = { onOperated(card) },
+                            onDelete = { onDeleteRequest(card) }
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = showScrollToTop,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 20.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "回到顶部")
+                }
             }
         }
     }
@@ -1410,7 +1645,11 @@ fun SwipeableCardItem(
     onOperated: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     var expandedNote by remember { mutableStateOf(false) }
+    var isMasked by remember { mutableStateOf(true) } // 卡号脱敏状态
+
     val now = System.currentTimeMillis()
     val diffDays = (card.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
 
@@ -1501,9 +1740,9 @@ fun SwipeableCardItem(
                                 Surface(color = Color(0xFFE53935), shape = RoundedCornerShape(4.dp)) {
                                     Text("已过期", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
                                 }
-                            } else if (diffDays <= 3) {
+                            } else if (diffDays <= 30) {
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Surface(color = Color(0xFFFF9800), shape = RoundedCornerShape(4.dp)) {
+                                Surface(color = if (diffDays <= 3) Color(0xFFE53935) else Color(0xFFFF9800), shape = RoundedCornerShape(4.dp)) {
                                     Text("剩${diffDays}天", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -1525,10 +1764,48 @@ fun SwipeableCardItem(
 
                     if (card.cardNumber.isNotBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = textColor.copy(alpha = 0.88f), fontWeight = FontWeight.Medium)
+                        val displayedCardNum = if (isMasked && card.cardNumber.length > 6) {
+                            val start = card.cardNumber.take(4)
+                            val end = card.cardNumber.takeLast(4)
+                            "$start **** $end"
+                        } else card.cardNumber
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("卡号: $displayedCardNum", fontSize = 14.sp, color = textColor.copy(alpha = 0.88f), fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(
+                                onClick = { isMasked = !isMasked },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isMasked) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                                    contentDescription = "显隐卡号",
+                                    tint = iconActionColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(card.cardNumber))
+                                    Toast.makeText(context, "卡号已复制", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = "复制卡号",
+                                    tint = iconActionColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                     }
 
-                    if (card.note.isNotBlank()) {
+                    if (card.cost > 0.0) {
+                        Text("维护费用: ¥${card.cost} / ${card.costCycle}", fontSize = 12.sp, color = textColor.copy(alpha = 0.8f))
+                    }
+
+                    if (card.note.isNotBlank() || card.historyLogs.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         AnimatedVisibility(visible = expandedNote) {
                             Surface(
@@ -1536,16 +1813,21 @@ fun SwipeableCardItem(
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = "备注: ${card.note}",
-                                    fontSize = 13.sp,
-                                    color = if (isDarkBg) Color.White else Color.Black,
-                                    modifier = Modifier.padding(8.dp)
-                                )
+                                Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (card.note.isNotBlank()) {
+                                        Text("备注: ${card.note}", fontSize = 13.sp, color = if (isDarkBg) Color.White else Color.Black)
+                                    }
+                                    if (card.historyLogs.isNotEmpty()) {
+                                        Text("📜 维护历史记录:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        card.historyLogs.take(5).forEach { log ->
+                                            Text("• $log", fontSize = 11.sp, color = if (isDarkBg) Color.LightGray else Color.DarkGray)
+                                        }
+                                    }
+                                }
                             }
                         }
                         if (!expandedNote) {
-                            Text("点击查看备注 (长按可置顶)...", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
+                            Text("点击查看备注与历史日志 (长按置顶)...", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
                         }
                     }
 
@@ -1596,6 +1878,7 @@ fun EditCardScreen(
 
     val presetCategories = remember { listOf("银行卡", "电话卡", "邮箱", "账号", "其他") }
     val presetIntervals = remember { listOf(0, 3, 7, 15, 30) }
+    val costCycles = remember { listOf("每年", "每月", "一次性") }
 
     val presetColors = remember {
         listOf(
@@ -1611,6 +1894,10 @@ fun EditCardScreen(
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var note by remember { mutableStateOf(initialCard?.note ?: "") }
     
+    var costInput by remember { mutableStateOf(if ((initialCard?.cost ?: 0.0) > 0) initialCard!!.cost.toString() else "") }
+    var costCycle by remember { mutableStateOf(initialCard?.costCycle ?: "每年") }
+    var syncCalendar by remember { mutableStateOf(initialCard?.syncCalendar ?: false) }
+
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: presetCategories[0]) }
     var isCustomCategory by remember { mutableStateOf(!presetCategories.contains(initialCard?.category ?: presetCategories[0])) }
     var customCategoryInput by remember { mutableStateOf(if (isCustomCategory) (initialCard?.category ?: "") else "") }
@@ -1688,6 +1975,29 @@ fun EditCardScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = costInput,
+                    onValueChange = { costInput = it },
+                    label = { Text("维护费用 (选填)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("周期", fontSize = 12.sp, color = Color.Gray)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        costCycles.forEach { cycle ->
+                            FilterChip(
+                                selected = costCycle == cycle,
+                                onClick = { costCycle = cycle },
+                                label = { Text(cycle, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
@@ -1696,6 +2006,12 @@ fun EditCardScreen(
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = syncCalendar, onCheckedChange = { syncCalendar = it })
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("同时自动同步到手机系统日历日程", fontSize = 13.sp)
+            }
 
             Text("卡片分类:", fontSize = 13.sp, color = Color.Gray)
             FlowRow(
@@ -1852,7 +2168,11 @@ fun EditCardScreen(
                         isPinned = initialCard?.isPinned ?: false,
                         pinTime = initialCard?.pinTime ?: 0L,
                         bgType = bgType,
-                        bgValue = bgValue
+                        bgValue = bgValue,
+                        cost = costInput.toDoubleOrNull() ?: 0.0,
+                        costCycle = costCycle,
+                        syncCalendar = syncCalendar,
+                        historyLogs = initialCard?.historyLogs ?: emptyList()
                     )
                     onSave(card)
                 },
@@ -1868,7 +2188,7 @@ fun EditCardScreen(
 @Composable
 fun ProfileScreen(
     currentTheme: AppTheme,
-    cardCount: Int,
+    cardList: List<CardItem>,
     onThemeChanged: (AppTheme) -> Unit,
     onBatchManageClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -1878,6 +2198,7 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
     val lastExportTime = remember { CardStorage.getLastExportTime(context) }
+    var biometricEnabled by remember { mutableStateOf(CardStorage.isBiometricEnabled(context)) }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -1886,6 +2207,19 @@ fun ProfileScreen(
             val parsedCards = ExcelExportImportHelper.parseCsvFromUri(context, it)
             onImportFileParsed(parsedCards)
         }
+    }
+
+    // 统计年度总支出与月度均摊支出
+    val (annualTotal, monthlyAvg) = remember(cardList) {
+        var total = 0.0
+        cardList.forEach {
+            when (it.costCycle) {
+                "每年" -> total += it.cost
+                "每月" -> total += it.cost * 12
+                "一次性" -> total += it.cost
+            }
+        }
+        Pair(total, total / 12.0)
     }
 
     Column(
@@ -1921,10 +2255,31 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v3.4", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text("已安全管理 $cardCount 张卡片", color = Color.Gray, fontSize = 13.sp)
+            Text("卡片提醒助手 v4.0", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("已安全管理 ${cardList.size} 张卡片", color = Color.Gray, fontSize = 13.sp)
         }
 
+        // 维护费用支出统计看板
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("📊 维护与续费支出看板", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("年均维护支出预估", fontSize = 12.sp, color = Color.Gray)
+                        Text(String.format("¥ %.2f", annualTotal), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("月均均摊支出", fontSize = 12.sp, color = Color.Gray)
+                        Text(String.format("¥ %.2f", monthlyAvg), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF26A69A))
+                    }
+                }
+            }
+        }
+
+        // 批量管理入口
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -1954,6 +2309,33 @@ fun ProfileScreen(
             }
         }
 
+        // 安全与隐私设置
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("应用生物识别锁 (指纹/面容)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("开启后启动应用需进行身份验证", fontSize = 12.sp, color = Color.Gray)
+                }
+                Switch(
+                    checked = biometricEnabled,
+                    onCheckedChange = {
+                        biometricEnabled = it
+                        CardStorage.setBiometricEnabled(context, it)
+                    }
+                )
+            }
+        }
+
+        // 表格导入导出与备份
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2020,6 +2402,7 @@ fun ProfileScreen(
             }
         }
 
+        // 外观主题
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2041,9 +2424,7 @@ fun ProfileScreen(
                             selected = currentTheme == theme,
                             onClick = { onThemeChanged(theme) },
                             label = { 
-                                Text(
-                                    if (theme.isDynamic) "${theme.displayName} ✨" else theme.displayName 
-                                ) 
+                                Text(theme.displayName) 
                             },
                             leadingIcon = {
                                 if (currentTheme == theme) {
