@@ -36,7 +36,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.History
@@ -245,7 +244,6 @@ object CardStorage {
     }
 }
 
-// 自动检测 GBK / UTF-8 编码并解析 CSV 工具类
 object ExcelExportImportHelper {
     private val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -322,15 +320,13 @@ object ExcelExportImportHelper {
         val result = mutableListOf<CardItem>()
         try {
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return emptyList()
-            
-            // 编码自动探测：检查 UTF-8 与 GBK
             val charset = detectCharset(bytes)
             val reader = BufferedReader(InputStreamReader(ByteArrayInputStream(bytes), charset))
             var isFirstLine = true
             var line: String?
 
             while (reader.readLine().also { line = it } != null) {
-                val cleanLine = (line ?: "").removePrefix("\uFEFF") // 移除 BOM
+                val cleanLine = (line ?: "").removePrefix("\uFEFF")
                 if (isFirstLine) {
                     isFirstLine = false
                     continue
@@ -455,7 +451,7 @@ fun MainTabContainer() {
     var operateConfirmCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
-    var isBatchManaging by remember { mutableStateOf(false) } // 批量管理页面状态
+    var isBatchManaging by remember { mutableStateOf(false) }
     var importPendingCards by remember { mutableStateOf<List<CardItem>?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
 
@@ -652,7 +648,7 @@ fun MainTabContainer() {
                     )
                 } else {
                     when (selectedTab) {
-                        0 -> CategorizedHomeScreen(cardList, onEdit = { card ->
+                        0 -> CategorizedHomeScreen(cardList = cardList, onEdit = { card ->
                             editingCard = card
                             selectedTab = 2
                         })
@@ -660,68 +656,69 @@ fun MainTabContainer() {
                             displayList = displayList,
                             onTogglePin = { card ->
                                 val newList = cardList.map {
-                                if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
+                                    if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
+                                }
+                                cardList = newList
+                                CardStorage.saveCards(context, newList)
+                            },
+                            onLongClickPin = { card ->
+                                pinDialogCard = card
+                            },
+                            onEdit = { card ->
+                                editingCard = card
+                                selectedTab = 2
+                            },
+                            onOperated = { card ->
+                                operateConfirmCard = card
+                            },
+                            onDeleteRequest = { card ->
+                                deletingCard = card
                             }
-                            cardList = newList
-                            CardStorage.saveCards(context, newList)
-                        },
-                        onLongClickPin = { card ->
-                            pinDialogCard = card
-                        },
-                        onEdit = { card ->
-                            editingCard = card
-                            selectedTab = 2
-                        },
-                        onOperated = { card ->
-                            operateConfirmCard = card
-                        },
-                        onDeleteRequest = { card ->
-                            deletingCard = card
-                        }
-                    )
-                    2 -> EditCardScreen(
-                        initialCard = editingCard,
-                        onSave = { newCard ->
-                            val updatedList = cardList.filter { it.id != newCard.id } + newCard
-                            cardList = updatedList
-                            CardStorage.saveCards(context, updatedList)
+                        )
+                        2 -> EditCardScreen(
+                            initialCard = editingCard,
+                            onSave = { newCard ->
+                                val updatedList = cardList.filter { it.id != newCard.id } + newCard
+                                cardList = updatedList
+                                CardStorage.saveCards(context, updatedList)
 
-                            editingCard = null
-                            selectedTab = 1
-                            Toast.makeText(context, "卡片已保存！", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                    3 -> ProfileScreen(
-                        currentTheme = currentTheme,
-                        cardCount = cardList.size,
-                        onThemeChanged = { newTheme ->
-                            currentTheme = newTheme
-                            CardStorage.saveTheme(context, newTheme)
-                        },
-                        onBatchManageClick = {
-                            isBatchManaging = true
-                        },
-                        onExportClick = {
-                            if (cardList.isEmpty()) {
-                                Toast.makeText(context, "当前暂无卡片数据可导出", Toast.LENGTH_SHORT).show()
-                            } else {
-                                ExcelExportImportHelper.exportToCsv(context, cardList)
+                                editingCard = null
+                                selectedTab = 1
+                                Toast.makeText(context, "卡片已保存！", Toast.LENGTH_SHORT).show()
                             }
-                        },
-                        onExportTemplateClick = {
-                            ExcelExportImportHelper.exportTemplate(context)
-                        },
-                        onImportFileParsed = { importedCards ->
-                            if (importedCards.isEmpty()) {
-                                Toast.makeText(context, "未能从表格中解析出有效卡片数据", Toast.LENGTH_SHORT).show()
-                            } else {
-                                importPendingCards = importedCards
+                        )
+                        3 -> ProfileScreen(
+                            currentTheme = currentTheme,
+                            cardCount = cardList.size,
+                            onThemeChanged = { newTheme ->
+                                currentTheme = newTheme
+                                CardStorage.saveTheme(context, newTheme)
+                            },
+                            onBatchManageClick = {
+                                isBatchManaging = true
+                            },
+                            onExportClick = {
+                                if (cardList.isEmpty()) {
+                                    Toast.makeText(context, "当前暂无卡片数据可导出", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    ExcelExportImportHelper.exportToCsv(context, cardList)
+                                }
+                            },
+                            onExportTemplateClick = {
+                                ExcelExportImportHelper.exportTemplate(context)
+                            },
+                            onImportFileParsed = { importedCards ->
+                                if (importedCards.isEmpty()) {
+                                    Toast.makeText(context, "未能从表格中解析出有效卡片数据", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    importPendingCards = importedCards
+                                }
+                            },
+                            onRestoreClick = {
+                                showRestoreConfirmDialog = true
                             }
-                        },
-                        onRestoreClick = {
-                            showRestoreConfirmDialog = true
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -927,7 +924,6 @@ fun MainTabContainer() {
     }
 }
 
-// 批量整理独立全屏组件
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BatchManagementScreen(
@@ -980,7 +976,6 @@ fun BatchManagementScreen(
             }
         }
 
-        // 批量操作快捷按钮条
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1590,7 +1585,6 @@ fun SwipeableCardItem(
     }
 }
 
-// 新增与编辑模块：支持“自定义分类”输入
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardScreen(
@@ -1617,7 +1611,6 @@ fun EditCardScreen(
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
     var note by remember { mutableStateOf(initialCard?.note ?: "") }
     
-    // 分类自定义逻辑
     var selectedCategory by remember { mutableStateOf(initialCard?.category ?: presetCategories[0]) }
     var isCustomCategory by remember { mutableStateOf(!presetCategories.contains(initialCard?.category ?: presetCategories[0])) }
     var customCategoryInput by remember { mutableStateOf(if (isCustomCategory) (initialCard?.category ?: "") else "") }
@@ -1871,7 +1864,6 @@ fun EditCardScreen(
     }
 }
 
-// “我的”模块
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfileScreen(
@@ -1933,7 +1925,6 @@ fun ProfileScreen(
             Text("已安全管理 $cardCount 张卡片", color = Color.Gray, fontSize = 13.sp)
         }
 
-        // 卡片整理（批量管理）入口
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -1963,7 +1954,6 @@ fun ProfileScreen(
             }
         }
 
-        // 数据备份与 Excel 导入导出卡片
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2030,7 +2020,6 @@ fun ProfileScreen(
             }
         }
 
-        // 主题设置
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
