@@ -229,7 +229,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainTabContainer() {
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     var cardList by remember { mutableStateOf(CardStorage.loadCards(context)) }
     var currentTheme by remember { mutableStateOf(CardStorage.loadTheme(context)) }
@@ -243,7 +243,6 @@ fun MainTabContainer() {
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
 
-    // 检查并处理过期卡片的自动周期续期（针对重复卡片）
     LaunchedEffect(Unit) {
         val now = System.currentTimeMillis()
         var updated = false
@@ -253,7 +252,6 @@ fun MainTabContainer() {
                 val addMillis = card.repeatDays * 24 * 60 * 60 * 1000L
                 val nextExpiry = card.expiryDateMillis + addMillis
                 
-                // 自动为下一个周期重新生成系统闹钟
                 CardReminder.setSystemAlarm(
                     context = context,
                     expiryDateMillis = nextExpiry,
@@ -291,27 +289,28 @@ fun MainTabContainer() {
             }
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "theme_gradient")
-    val animatedOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1200f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "offset"
-    )
-
-    val dynamicBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFE0F7FA),
-            Color(0xFFE8EAF6),
-            Color(0xFFF3E5F5),
-            Color(0xFFE1F5FE)
-        ),
-        start = Offset(animatedOffset, 0f),
-        end = Offset(0f, animatedOffset)
-    )
+    val dynamicBrush = if (currentTheme.isDynamic) {
+        val infiniteTransition = rememberInfiniteTransition(label = "theme_gradient")
+        val animatedOffset by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1200f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 10000, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "offset"
+        )
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFFE0F7FA),
+                Color(0xFFE8EAF6),
+                Color(0xFFF3E5F5),
+                Color(0xFFE1F5FE)
+            ),
+            start = Offset(animatedOffset, 0f),
+            end = Offset(0f, animatedOffset)
+        )
+    } else null
 
     val colorScheme = when (currentTheme) {
         AppTheme.DARK -> darkColorScheme(
@@ -440,7 +439,7 @@ fun MainTabContainer() {
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
-                        if (currentTheme.isDynamic) Modifier.background(dynamicBrush)
+                        if (dynamicBrush != null) Modifier.background(dynamicBrush)
                         else Modifier.background(MaterialTheme.colorScheme.background)
                     )
                     .padding(padding)
@@ -477,7 +476,6 @@ fun MainTabContainer() {
                             cardList = updatedList
                             CardStorage.saveCards(context, updatedList)
 
-                            // 调起系统原生闹钟生成精确响铃提醒
                             CardReminder.setSystemAlarm(
                                 context = context,
                                 expiryDateMillis = newCard.expiryDateMillis,
@@ -489,7 +487,6 @@ fun MainTabContainer() {
 
                             editingCard = null
                             selectedTab = 1
-                            Toast.makeText(context, "卡片已保存并同步至系统闹钟！", Toast.LENGTH_SHORT).show()
                         }
                     )
                     3 -> ProfileScreen(
@@ -618,7 +615,7 @@ fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
 
     Card(
         modifier = Modifier
@@ -834,7 +831,7 @@ fun SwipeableCardItem(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
                     val timeStr = String.format("%02d:%02d", card.remindHour, card.remindMinute)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -861,8 +858,8 @@ fun WheelTimePicker(
     initialMinute: Int,
     onTimeSelected: (hour: Int, minute: Int) -> Unit
 ) {
-    val hours = (0..23).toList()
-    val minutes = (0..59).toList()
+    val hours = remember { (0..23).toList() }
+    val minutes = remember { (0..59).toList() }
 
     val hourListState = rememberLazyListState(initialFirstVisibleItemIndex = initialHour)
     val minuteListState = rememberLazyListState(initialFirstVisibleItemIndex = initialMinute)
@@ -870,11 +867,15 @@ fun WheelTimePicker(
     val hourFling = rememberSnapFlingBehavior(lazyListState = hourListState)
     val minuteFling = rememberSnapFlingBehavior(lazyListState = minuteListState)
 
-    LaunchedEffect(hourListState.firstVisibleItemIndex, minuteListState.firstVisibleItemIndex) {
-        onTimeSelected(
-            hours[hourListState.firstVisibleItemIndex % hours.size],
-            minutes[minuteListState.firstVisibleItemIndex % minutes.size]
-        )
+    val selectedHour by remember {
+        derivedStateOf { hours[hourListState.firstVisibleItemIndex % hours.size] }
+    }
+    val selectedMinute by remember {
+        derivedStateOf { minutes[minuteListState.firstVisibleItemIndex % minutes.size] }
+    }
+
+    LaunchedEffect(selectedHour, selectedMinute) {
+        onTimeSelected(selectedHour, selectedMinute)
     }
 
     Surface(
@@ -962,16 +963,18 @@ fun EditCardScreen(
     onSave: (CardItem) -> Unit
 ) {
     val context = LocalContext.current
-    val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
-    val advanceDaysOptions = listOf(0, 1, 2, 3, 7, 15, 30)
+    val categories = remember { listOf("银行卡", "电话卡", "邮箱", "账号", "其他") }
+    val advanceDaysOptions = remember { listOf(0, 1, 2, 3, 7, 15, 30) }
 
-    val presetColors = listOf(
-        "0xFFFFFFFF" to "白",
-        "0xFFE3F2FD" to "蓝",
-        "0xFF1E88E5" to "深蓝",
-        "0xFF26A69A" to "绿",
-        "0xFFFF7043" to "橙"
-    )
+    val presetColors = remember {
+        listOf(
+            "0xFFFFFFFF" to "白",
+            "0xFFE3F2FD" to "蓝",
+            "0xFF1E88E5" to "深蓝",
+            "0xFF26A69A" to "绿",
+            "0xFFFF7043" to "橙"
+        )
+    }
 
     var title by remember { mutableStateOf(initialCard?.title ?: "") }
     var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
@@ -987,16 +990,16 @@ fun EditCardScreen(
         }
     }
 
-    var selectedYear by remember { mutableStateOf(calendar.get(Calendar.YEAR)) }
-    var selectedMonth by remember { mutableStateOf(calendar.get(Calendar.MONTH) + 1) }
-    var selectedDay by remember { mutableStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
+    var selectedYear by remember { mutableIntStateOf(calendar.get(Calendar.YEAR)) }
+    var selectedMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH) + 1) }
+    var selectedDay by remember { mutableIntStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
 
-    var remindHour by remember { mutableStateOf(initialCard?.remindHour ?: 9) }
-    var remindMinute by remember { mutableStateOf(initialCard?.remindMinute ?: 0) }
+    var remindHour by remember { mutableIntStateOf(initialCard?.remindHour ?: 9) }
+    var remindMinute by remember { mutableIntStateOf(initialCard?.remindMinute ?: 0) }
 
-    var advanceDays by remember { mutableStateOf(initialCard?.advanceDays ?: 0) }
+    var advanceDays by remember { mutableIntStateOf(initialCard?.advanceDays ?: 0) }
     var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
-    var repeatDays by remember { mutableStateOf(initialCard?.repeatDays ?: 7) }
+    var repeatDays by remember { mutableIntStateOf(initialCard?.repeatDays ?: 7) }
 
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -1206,7 +1209,9 @@ fun ProfileScreen(
         Spacer(modifier = Modifier.height(20.dp))
         
         val context = LocalContext.current
-        val iconResId = context.resources.getIdentifier("app_icon", "drawable", context.packageName)
+        val iconResId = remember(context) {
+            context.resources.getIdentifier("app_icon", "drawable", context.packageName)
+        }
         if (iconResId != 0) {
             Image(
                 painter = painterResource(id = iconResId),
@@ -1227,7 +1232,7 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v2.7", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("卡片提醒助手 v2.8", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
         }
 
