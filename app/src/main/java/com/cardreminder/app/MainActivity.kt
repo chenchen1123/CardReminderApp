@@ -22,19 +22,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -48,7 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -104,11 +104,7 @@ data class CardItem(
     val category: String,
     val note: String = "",
     val expiryDateMillis: Long,
-    val remindHour: Int = 9,
-    val remindMinute: Int = 0,
-    val advanceDays: Int = 0,
-    val isRepeat: Boolean = false,
-    val repeatDays: Int = 7,
+    val intervalDays: Int = 30, // 提醒/续期间隔天数
     val isPinned: Boolean = false,
     val pinTime: Long = 0L,
     val bgType: String = "COLOR",
@@ -130,11 +126,7 @@ object CardStorage {
                 put("category", card.category)
                 put("note", card.note)
                 put("expiryDateMillis", card.expiryDateMillis)
-                put("remindHour", card.remindHour)
-                put("remindMinute", card.remindMinute)
-                put("advanceDays", card.advanceDays)
-                put("isRepeat", card.isRepeat)
-                put("repeatDays", card.repeatDays)
+                put("intervalDays", card.intervalDays)
                 put("isPinned", card.isPinned)
                 put("pinTime", card.pinTime)
                 put("bgType", card.bgType)
@@ -162,11 +154,7 @@ object CardStorage {
                         category = obj.optString("category", "其他"),
                         note = obj.optString("note", ""),
                         expiryDateMillis = obj.optLong("expiryDateMillis", System.currentTimeMillis()),
-                        remindHour = obj.optInt("remindHour", 9),
-                        remindMinute = obj.optInt("remindMinute", 0),
-                        advanceDays = obj.optInt("advanceDays", 0),
-                        isRepeat = obj.optBoolean("isRepeat", false),
-                        repeatDays = obj.optInt("repeatDays", 7),
+                        intervalDays = obj.optInt("intervalDays", 30),
                         isPinned = obj.optBoolean("isPinned", false),
                         pinTime = obj.optLong("pinTime", 0L),
                         bgType = obj.optString("bgType", "COLOR"),
@@ -209,7 +197,6 @@ class MainActivity : ComponentActivity() {
         val permissions = mutableListOf<String>()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
             permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -239,38 +226,10 @@ fun MainTabContainer() {
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
     var pinDialogCard by remember { mutableStateOf<CardItem?>(null) }
+    var operateConfirmCard by remember { mutableStateOf<CardItem?>(null) } // 已操作确认弹窗
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val categoryOptions = listOf("全部", "银行卡", "电话卡", "邮箱", "账号", "其他")
-
-    LaunchedEffect(Unit) {
-        val now = System.currentTimeMillis()
-        var updated = false
-        val newList = cardList.map { card ->
-            if (card.isRepeat && card.expiryDateMillis < now) {
-                updated = true
-                val addMillis = card.repeatDays * 24 * 60 * 60 * 1000L
-                val nextExpiry = card.expiryDateMillis + addMillis
-                
-                CardReminder.setSystemAlarm(
-                    context = context,
-                    expiryDateMillis = nextExpiry,
-                    remindHour = card.remindHour,
-                    remindMinute = card.remindMinute,
-                    title = card.title,
-                    advanceDays = card.advanceDays
-                )
-                
-                card.copy(expiryDateMillis = nextExpiry)
-            } else {
-                card
-            }
-        }
-        if (updated) {
-            cardList = newList
-            CardStorage.saveCards(context, newList)
-        }
-    }
 
     val displayList = remember(cardList, selectedCategoryFilter, currentSortOrder) {
         cardList.filter { selectedCategoryFilter == "全部" || it.category == selectedCategoryFilter }
@@ -465,6 +424,9 @@ fun MainTabContainer() {
                             editingCard = card
                             selectedTab = 2
                         },
+                        onOperated = { card ->
+                            operateConfirmCard = card
+                        },
                         onDeleteRequest = { card ->
                             deletingCard = card
                         }
@@ -476,17 +438,9 @@ fun MainTabContainer() {
                             cardList = updatedList
                             CardStorage.saveCards(context, updatedList)
 
-                            CardReminder.setSystemAlarm(
-                                context = context,
-                                expiryDateMillis = newCard.expiryDateMillis,
-                                remindHour = newCard.remindHour,
-                                remindMinute = newCard.remindMinute,
-                                title = "[${newCard.category}] ${newCard.title}",
-                                advanceDays = newCard.advanceDays
-                            )
-
                             editingCard = null
                             selectedTab = 1
+                            Toast.makeText(context, "卡片已保存！", Toast.LENGTH_SHORT).show()
                         }
                     )
                     3 -> ProfileScreen(
@@ -499,6 +453,66 @@ fun MainTabContainer() {
                 }
             }
         }
+    }
+
+    // “已操作”确认并自动更新到期日期弹窗
+    if (operateConfirmCard != null) {
+        val card = operateConfirmCard!!
+        val interval = card.intervalDays
+        
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val currentExpiryStr = sdf.format(Date(card.expiryDateMillis))
+        
+        val nextCalendar = Calendar.getInstance().apply {
+            timeInMillis = card.expiryDateMillis
+            add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
+        }
+        val nextExpiryStr = sdf.format(nextCalendar.time)
+
+        AlertDialog(
+            onDismissRequest = { operateConfirmCard = null },
+            title = { Text("确认已操作？", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("卡片：${card.title}")
+                    Text("当前到期日期：$currentExpiryStr", color = Color.Gray, fontSize = 13.sp)
+                    Text(
+                        "确认后将基于间隔天数 (${interval}天)，自动将到期日期更新为：",
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        nextExpiryStr,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val updatedList = cardList.map { item ->
+                            if (item.id == card.id) {
+                                item.copy(expiryDateMillis = nextCalendar.timeInMillis)
+                            } else {
+                                item
+                            }
+                        }
+                        cardList = updatedList
+                        CardStorage.saveCards(context, updatedList)
+                        Toast.makeText(context, "更新成功！新到期日期：$nextExpiryStr", Toast.LENGTH_SHORT).show()
+                        operateConfirmCard = null
+                    }
+                ) {
+                    Text("是，更新到期日")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { operateConfirmCard = null }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 
     if (pinDialogCard != null) {
@@ -675,6 +689,7 @@ fun ListScreen(
     onTogglePin: (CardItem) -> Unit,
     onLongClickPin: (CardItem) -> Unit,
     onEdit: (CardItem) -> Unit,
+    onOperated: (CardItem) -> Unit,
     onDeleteRequest: (CardItem) -> Unit
 ) {
     if (displayList.isEmpty()) {
@@ -693,6 +708,7 @@ fun ListScreen(
                     onTogglePin = { onTogglePin(card) },
                     onLongClickPin = { onLongClickPin(card) },
                     onEdit = { onEdit(card) },
+                    onOperated = { onOperated(card) },
                     onDelete = { onDeleteRequest(card) }
                 )
             }
@@ -707,7 +723,8 @@ fun SwipeableCardItem(
     onTogglePin: () -> Unit,
     onLongClickPin: () -> Unit,
     onEdit: (CardItem) -> Unit,
-    onDelete: (CardItem) -> Unit
+    onOperated: () -> Unit,
+    onDelete: () -> Unit
 ) {
     var expandedNote by remember { mutableStateOf(false) }
 
@@ -798,7 +815,7 @@ fun SwipeableCardItem(
                                     tint = if (card.isPinned) MaterialTheme.colorScheme.primary else textColor.copy(alpha = 0.6f)
                                 )
                             }
-                            IconButton(onClick = { onDelete(card) }) {
+                            IconButton(onClick = onDelete) {
                                 Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textColor.copy(alpha = 0.6f))
                             }
                         }
@@ -830,125 +847,29 @@ fun SwipeableCardItem(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
-                    val timeStr = String.format("%02d:%02d", card.remindHour, card.remindMinute)
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 13.sp, color = textColor.copy(alpha = 0.8f))
-                        Text(
-                            "提醒时间: $timeStr (提前${card.advanceDays}天)",
-                            fontSize = 12.sp,
-                            color = textColor,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
+                        Column {
+                            Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            Text("提醒间隔: ${if(card.intervalDays > 0) "${card.intervalDays}天" else "不提醒"}", fontSize = 12.sp, color = textColor.copy(alpha = 0.8f))
+                        }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun WheelTimePicker(
-    initialHour: Int,
-    initialMinute: Int,
-    onTimeSelected: (hour: Int, minute: Int) -> Unit
-) {
-    val hours = remember { (0..23).toList() }
-    val minutes = remember { (0..59).toList() }
-
-    val hourListState = rememberLazyListState(initialFirstVisibleItemIndex = initialHour)
-    val minuteListState = rememberLazyListState(initialFirstVisibleItemIndex = initialMinute)
-
-    val hourFling = rememberSnapFlingBehavior(lazyListState = hourListState)
-    val minuteFling = rememberSnapFlingBehavior(lazyListState = minuteListState)
-
-    val selectedHour by remember {
-        derivedStateOf { hours[hourListState.firstVisibleItemIndex % hours.size] }
-    }
-    val selectedMinute by remember {
-        derivedStateOf { minutes[minuteListState.firstVisibleItemIndex % minutes.size] }
-    }
-
-    LaunchedEffect(selectedHour, selectedMinute) {
-        onTimeSelected(selectedHour, selectedMinute)
-    }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp)
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                LazyColumn(
-                    state = hourListState,
-                    flingBehavior = hourFling,
-                    contentPadding = PaddingValues(vertical = 35.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(hours.size) { index ->
-                        val h = hours[index]
-                        val isSelected = hourListState.firstVisibleItemIndex == index
-                        Text(
-                            text = String.format("%02d 时", h),
-                            fontSize = if (isSelected) 18.sp else 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(30.dp)
-                        )
-                    }
-                }
-            }
-
-            Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                LazyColumn(
-                    state = minuteListState,
-                    flingBehavior = minuteFling,
-                    contentPadding = PaddingValues(vertical = 35.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(minutes.size) { index ->
-                        val m = minutes[index]
-                        val isSelected = minuteListState.firstVisibleItemIndex == index
-                        Text(
-                            text = String.format("%02d 分", m),
-                            fontSize = if (isSelected) 18.sp else 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(30.dp)
-                        )
+                        // 一键已操作更新按钮
+                        Button(
+                            onClick = onOperated,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26A69A)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("已操作", fontSize = 12.sp)
+                        }
                     }
                 }
             }
@@ -964,7 +885,7 @@ fun EditCardScreen(
 ) {
     val context = LocalContext.current
     val categories = remember { listOf("银行卡", "电话卡", "邮箱", "账号", "其他") }
-    val advanceDaysOptions = remember { listOf(0, 1, 2, 3, 7, 15, 30) }
+    val presetIntervals = remember { listOf(0, 3, 7, 15, 30) }
 
     val presetColors = remember {
         listOf(
@@ -994,12 +915,10 @@ fun EditCardScreen(
     var selectedMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH) + 1) }
     var selectedDay by remember { mutableIntStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
 
-    var remindHour by remember { mutableIntStateOf(initialCard?.remindHour ?: 9) }
-    var remindMinute by remember { mutableIntStateOf(initialCard?.remindMinute ?: 0) }
-
-    var advanceDays by remember { mutableIntStateOf(initialCard?.advanceDays ?: 0) }
-    var isRepeat by remember { mutableStateOf(initialCard?.isRepeat ?: false) }
-    var repeatDays by remember { mutableIntStateOf(initialCard?.repeatDays ?: 7) }
+    // 提醒间隔逻辑：包含预设 + 自定义天数
+    var selectedInterval by remember { mutableIntStateOf(initialCard?.intervalDays ?: 30) }
+    var isCustomInterval by remember { mutableStateOf(!presetIntervals.contains(initialCard?.intervalDays ?: 30)) }
+    var customIntervalInput by remember { mutableStateOf(if (isCustomInterval) (initialCard?.intervalDays ?: 30).toString() else "") }
 
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -1128,27 +1047,36 @@ fun EditCardScreen(
             }
         }
 
-        Text("响铃时刻 (上下滑动选择):", fontSize = 13.sp, color = Color.Gray)
-        WheelTimePicker(
-            initialHour = remindHour,
-            initialMinute = remindMinute,
-            onTimeSelected = { h, m ->
-                remindHour = h
-                remindMinute = m
-            }
-        )
-
-        Text("提前提醒:", fontSize = 13.sp, color = Color.Gray)
+        Text("提醒/续期间隔天数:", fontSize = 13.sp, color = Color.Gray)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            advanceDaysOptions.forEach { days ->
+            presetIntervals.forEach { days ->
                 FilterChip(
-                    selected = advanceDays == days,
-                    onClick = { advanceDays = days },
-                    label = { Text(if (days == 0) "当天" else "${days}天") }
+                    selected = !isCustomInterval && selectedInterval == days,
+                    onClick = {
+                        isCustomInterval = false
+                        selectedInterval = days
+                    },
+                    label = { Text(if (days == 0) "不提醒" else "${days}天") }
                 )
             }
+            FilterChip(
+                selected = isCustomInterval,
+                onClick = { isCustomInterval = true },
+                label = { Text("自定义") }
+            )
+        }
+
+        if (isCustomInterval) {
+            OutlinedTextField(
+                value = customIntervalInput,
+                onValueChange = { customIntervalInput = it.filter { char -> char.isDigit() } },
+                label = { Text("输入自定义间隔天数 (如: 60)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -1161,9 +1089,15 @@ fun EditCardScreen(
                     set(Calendar.YEAR, selectedYear)
                     set(Calendar.MONTH, selectedMonth - 1)
                     set(Calendar.DAY_OF_MONTH, selectedDay)
-                    set(Calendar.HOUR_OF_DAY, remindHour)
-                    set(Calendar.MINUTE, remindMinute)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
                     set(Calendar.SECOND, 0)
+                }
+
+                val finalInterval = if (isCustomInterval) {
+                    customIntervalInput.toIntOrNull() ?: 30
+                } else {
+                    selectedInterval
                 }
 
                 val card = CardItem(
@@ -1173,11 +1107,7 @@ fun EditCardScreen(
                     category = selectedCategory,
                     note = note,
                     expiryDateMillis = saveCalendar.timeInMillis,
-                    remindHour = remindHour,
-                    remindMinute = remindMinute,
-                    advanceDays = advanceDays,
-                    isRepeat = isRepeat,
-                    repeatDays = repeatDays,
+                    intervalDays = finalInterval,
                     isPinned = initialCard?.isPinned ?: false,
                     pinTime = initialCard?.pinTime ?: 0L,
                     bgType = bgType,
@@ -1187,7 +1117,7 @@ fun EditCardScreen(
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("保存卡片并同步系统闹钟", fontSize = 16.sp)
+            Text("保存卡片信息", fontSize = 16.sp)
         }
     }
 }
@@ -1232,8 +1162,8 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v2.8", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text("极简易用的卡片管理与到期提醒工具", color = Color.Gray, fontSize = 14.sp)
+            Text("卡片提醒助手 v3.0", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("极简易用的卡片管理与自动续期工具", color = Color.Gray, fontSize = 14.sp)
         }
 
         ElevatedCard(
