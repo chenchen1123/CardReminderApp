@@ -118,6 +118,7 @@ object StringsProvider {
                 "btn_confirm_update" -> "確認更新"
                 "cancel" -> "取消"
                 "confirm" -> "確認"
+                "back" -> "返回"
                 "card_name" -> "名稱 (如: 招商信用卡)"
                 "card_number" -> "卡號 / 帳號 (選填)"
                 "note" -> "備註信息 (選填)"
@@ -134,9 +135,29 @@ object StringsProvider {
                 "save_card" -> "儲存卡片信息"
                 "history_timeline" -> "📜 最近操作記錄 (最近100條)"
                 "history_desc" -> "支援查看每一次改動並一鍵恢復歷史狀態"
+                "history_total_cards" -> "對應卡片總數: %d 張"
+                "history_record_count" -> "操作改動記錄 (%d/100)"
+                "history_confirm_title" -> "確認恢復至此狀態？"
+                "history_confirm_desc" -> "將卡片列表回滾至【%s】操作時的狀態（共 %d 張卡片）。"
                 "btn_restore_this" -> "恢復至此狀態"
                 "batch_manage" -> "卡片批量整理與管理"
                 "batch_manage_desc" -> "多選、批量刪除、批量改分類及批量順延"
+                "batch_selected_count" -> "已勾選: %d / %d 張"
+                "batch_select_all" -> "全選"
+                "batch_unselect_all" -> "取消全選"
+                "batch_done_back" -> "完成返回"
+                "batch_delete_selected" -> "刪除所選"
+                "batch_change_category" -> "修改分類"
+                "batch_extend_date" -> "順延到期日"
+                "batch_clear_all" -> "清空全部"
+                "batch_delete_confirm_title" -> "確認批量刪除"
+                "batch_delete_confirm_desc" -> "確定要刪除選中的 %d 張卡片嗎？此操作不可逆（已自動備份）。"
+                "batch_clear_confirm_title" -> "危險：確認清空全部卡片？"
+                "batch_clear_confirm_desc" -> "將徹底清空當前所有卡片數據！系統已為您自動快照備份，隨時可在“我的”頁面恢復。"
+                "batch_category_confirm_title" -> "批量修改分類"
+                "batch_category_confirm_desc" -> "將選中的 %d 張卡片統一更改分類為："
+                "batch_extend_confirm_title" -> "批量順延到期日"
+                "batch_extend_confirm_desc" -> "將根據選中 %d 張卡片各自設定的【提醒/續期間隔天數】，統向後順延計算新的到期日。"
                 "biometric_title" -> "應用生物識別鎖 (指紋/面容)"
                 "biometric_desc" -> "開啟後啟動應用需進行身分驗證"
                 "data_backup" -> "數據備份與表格導入導出"
@@ -146,6 +167,14 @@ object StringsProvider {
                 "restore_backup" -> "恢復上次備份"
                 "theme_setting" -> "軟體外觀主題設置"
                 "lang_setting" -> "軟體語言設置 (Language)"
+                "theme_default" -> "預設明亮"
+                "theme_dark" -> "深色夜間"
+                "theme_ocean" -> "靜謐海洋"
+                "theme_dynamic" -> "動態炫彩 ✨"
+                "theme_star_space" -> "深空星海 🌌"
+                "theme_star_aurora" -> "極光星穹 ✨"
+                "theme_anime_sakura" -> "落櫻物語 🌸"
+                "theme_anime_cyber" -> "賽博霓虹 ⚡"
                 "all" -> "全部"
                 "bank_card" -> "銀行卡"
                 "sim_card" -> "電話卡"
@@ -195,6 +224,7 @@ object StringsProvider {
                 "btn_confirm_update" -> "Confirm"
                 "cancel" -> "Cancel"
                 "confirm" -> "Confirm"
+                "back" -> "Back"
                 "card_name" -> "Card Name (e.g. Visa Debit)"
                 "card_number" -> "Card / Account Number (Optional)"
                 "note" -> "Notes (Optional)"
@@ -211,9 +241,29 @@ object StringsProvider {
                 "save_card" -> "Save Card Information"
                 "history_timeline" -> "📜 Recent Operations (Last 100)"
                 "history_desc" -> "Review every change and rollback state anytime"
+                "history_total_cards" -> "Total cards: %d"
+                "history_record_count" -> "Operation History (%d/100)"
+                "history_confirm_title" -> "Restore this state?"
+                "history_confirm_desc" -> "Rollback card list to the state at [%s] (%d cards total)."
                 "btn_restore_this" -> "Restore State"
                 "batch_manage" -> "Batch Card Management"
                 "batch_manage_desc" -> "Select, delete, change category and renew in batch"
+                "batch_selected_count" -> "Selected: %d / %d"
+                "batch_select_all" -> "Select All"
+                "batch_unselect_all" -> "Deselect All"
+                "batch_done_back" -> "Done"
+                "batch_delete_selected" -> "Delete Selected"
+                "batch_change_category" -> "Change Category"
+                "batch_extend_date" -> "Renew Expiry"
+                "batch_clear_all" -> "Clear All"
+                "batch_delete_confirm_title" -> "Confirm Batch Deletion"
+                "batch_delete_confirm_desc" -> "Are you sure you want to delete %d selected cards?"
+                "batch_clear_confirm_title" -> "Warning: Clear All Cards?"
+                "batch_clear_confirm_desc" -> "This will clear all cards. An automatic backup has been created."
+                "batch_category_confirm_title" -> "Batch Change Category"
+                "batch_category_confirm_desc" -> "Change category of %d selected cards to:"
+                "batch_extend_confirm_title" -> "Batch Renewal"
+                "batch_extend_confirm_desc" -> "Extend expiry dates for %d selected cards according to their intervals."
                 "biometric_title" -> "Biometric App Lock (Fingerprint/Face)"
                 "biometric_desc" -> "Require authentication when opening app"
                 "data_backup" -> "Data Backup & CSV Excel"
@@ -223,6 +273,14 @@ object StringsProvider {
                 "restore_backup" -> "Restore Backup"
                 "theme_setting" -> "App Theme & Appearance"
                 "lang_setting" -> "Language Settings"
+                "theme_default" -> "Default Light"
+                "theme_dark" -> "Dark Mode"
+                "theme_ocean" -> "Ocean Blue"
+                "theme_dynamic" -> "Dynamic Flow ✨"
+                "theme_star_space" -> "Deep Space 🌌"
+                "theme_star_aurora" -> "Cosmic Aurora ✨"
+                "theme_anime_sakura" -> "Sakura Blossom 🌸"
+                "theme_anime_cyber" -> "Cyber Neon ⚡"
                 "all" -> "All"
                 "bank_card" -> "Bank Card"
                 "sim_card" -> "SIM Card"
@@ -272,6 +330,7 @@ object StringsProvider {
                 "btn_confirm_update" -> "更新する"
                 "cancel" -> "キャンセル"
                 "confirm" -> "確認"
+                "back" -> "戻る"
                 "card_name" -> "カード名 (例: 楽天カード)"
                 "card_number" -> "カード番号 / 口座 (任意)"
                 "note" -> "備考 (任意)"
@@ -288,9 +347,29 @@ object StringsProvider {
                 "save_card" -> "カード情報を保存"
                 "history_timeline" -> "📜 最近の操作履歴 (最新100件)"
                 "history_desc" -> "すべての変更を確認し、過去の状態に復元できます"
+                "history_total_cards" -> "対象カード数: %d枚"
+                "history_record_count" -> "操作履歴 (%d/100)"
+                "history_confirm_title" -> "この状態に復元しますか？"
+                "history_confirm_desc" -> "【%s】の操作時の状態（合計%d枚）に復元します。"
                 "btn_restore_this" -> "この状態に復元"
                 "batch_manage" -> "カード一括整理・管理"
                 "batch_manage_desc" -> "複数選択、一括削除、カテゴリ変更、一括更新"
+                "batch_selected_count" -> "選択中: %d / %d枚"
+                "batch_select_all" -> "全選択"
+                "batch_unselect_all" -> "選択解除"
+                "batch_done_back" -> "完了"
+                "batch_delete_selected" -> "選択削除"
+                "batch_change_category" -> "カテゴリ変更"
+                "batch_extend_date" -> "期限一括更新"
+                "batch_clear_all" -> "全削除"
+                "batch_delete_confirm_title" -> "一括削除の確認"
+                "batch_delete_confirm_desc" -> "選択した%d枚のカードを削除しますか？"
+                "batch_clear_confirm_title" -> "警告：すべてのカードを削除しますか？"
+                "batch_clear_confirm_desc" -> "すべてのカードを削除します。自動バックアップからいつでも復元できます。"
+                "batch_category_confirm_title" -> "カテゴリ一括変更"
+                "batch_category_confirm_desc" -> "選択した%d枚のカードのカテゴリを変更："
+                "batch_extend_confirm_title" -> "期限の一括更新"
+                "batch_extend_confirm_desc" -> "選択した%d枚のカードの有効期限を設定間隔に応じて延長します。"
                 "biometric_title" -> "生体認証ロック (指紋・顔認証)"
                 "biometric_desc" -> "起動時に認証を要求します"
                 "data_backup" -> "データバックアップとExcel入出力"
@@ -300,6 +379,14 @@ object StringsProvider {
                 "restore_backup" -> "バックアップ復元"
                 "theme_setting" -> "外観テーマ設定"
                 "lang_setting" -> "言語設定 (Language)"
+                "theme_default" -> "デフォルト・ライト"
+                "theme_dark" -> "ダークモード"
+                "theme_ocean" -> "オーシャン・ブルー"
+                "theme_dynamic" -> "グラデーション ✨"
+                "theme_star_space" -> "コズミック・スター 🌌"
+                "theme_star_aurora" -> "オーロラ・スカイ ✨"
+                "theme_anime_sakura" -> "サクラ・ブロッサム 🌸"
+                "theme_anime_cyber" -> "サイバー・ネオン ⚡"
                 "all" -> "すべて"
                 "bank_card" -> "銀行カード"
                 "sim_card" -> "SIMカード"
@@ -349,6 +436,7 @@ object StringsProvider {
                 "btn_confirm_update" -> "Confirmar"
                 "cancel" -> "Cancelar"
                 "confirm" -> "Confirmar"
+                "back" -> "Voltar"
                 "card_name" -> "Nome do Cartão"
                 "card_number" -> "Número do Cartão / Conta (Opcional)"
                 "note" -> "Notas (Opcional)"
@@ -365,9 +453,29 @@ object StringsProvider {
                 "save_card" -> "Salvar Cartão"
                 "history_timeline" -> "📜 Histórico de Operações (Últimas 100)"
                 "history_desc" -> "Veja todas as alterações e restaure qualquer estado"
+                "history_total_cards" -> "Total de cartões: %d"
+                "history_record_count" -> "Histórico (%d/100)"
+                "history_confirm_title" -> "Restaurar este estado?"
+                "history_confirm_desc" -> "Reverter lista de cartões para o estado em [%s] (%d cartões no total)."
                 "btn_restore_this" -> "Restaurar este estado"
                 "batch_manage" -> "Gerenciamento em Lote"
                 "batch_manage_desc" -> "Selecionar, excluir, alterar categoria e renovar"
+                "batch_selected_count" -> "Selecionados: %d / %d"
+                "batch_select_all" -> "Selecionar Tudo"
+                "batch_unselect_all" -> "Desmarcar Tudo"
+                "batch_done_back" -> "Concluído"
+                "batch_delete_selected" -> "Excluir Selecionados"
+                "batch_change_category" -> "Alterar Categoria"
+                "batch_extend_date" -> "Renovar Validade"
+                "batch_clear_all" -> "Limpar Tudo"
+                "batch_delete_confirm_title" -> "Confirmar Exclusão em Lote"
+                "batch_delete_confirm_desc" -> "Tem certeza de que deseja excluir %d cartões selecionados?"
+                "batch_clear_confirm_title" -> "Aviso: Limpar Todos os Cartões?"
+                "batch_clear_confirm_desc" -> "Isso limpará todos os cartões. Um backup automático foi criado."
+                "batch_category_confirm_title" -> "Alterar Categoria em Lote"
+                "batch_category_confirm_desc" -> "Alterar categoria de %d cartões selecionados para:"
+                "batch_extend_confirm_title" -> "Renovação em Lote"
+                "batch_extend_confirm_desc" -> "Estender as datas de validade de %d cartões de acordo com seus intervalos."
                 "biometric_title" -> "Bloqueio Biométrico (Digital/Face)"
                 "biometric_desc" -> "Exigir autenticação ao abrir o aplicativo"
                 "data_backup" -> "Backup de Dados e CSV Excel"
@@ -377,6 +485,14 @@ object StringsProvider {
                 "restore_backup" -> "Restaurar Backup"
                 "theme_setting" -> "Tema e Aparência"
                 "lang_setting" -> "Configurações de Idioma"
+                "theme_default" -> "Claro Padrão"
+                "theme_dark" -> "Modo Escuro"
+                "theme_ocean" -> "Azul Oceano"
+                "theme_dynamic" -> "Gradiente Dinâmico ✨"
+                "theme_star_space" -> "Espaço Profundo 🌌"
+                "theme_star_aurora" -> "Aurora Cósmica ✨"
+                "theme_anime_sakura" -> "Flor de Cerejeira 🌸"
+                "theme_anime_cyber" -> "Neon Cibernético ⚡"
                 "all" -> "Todos"
                 "bank_card" -> "Cartão Bancário"
                 "sim_card" -> "Cartão SIM"
@@ -426,6 +542,7 @@ object StringsProvider {
                 "btn_confirm_update" -> "确认更新"
                 "cancel" -> "取消"
                 "confirm" -> "确认"
+                "back" -> "返回"
                 "card_name" -> "名称 (如: 招商信用卡)"
                 "card_number" -> "卡号 / 账号 (选填)"
                 "note" -> "备注信息 (选填)"
@@ -442,9 +559,29 @@ object StringsProvider {
                 "save_card" -> "保存卡片信息"
                 "history_timeline" -> "📜 最近操作记录 (最近100条)"
                 "history_desc" -> "支持查看每一次改动并一键恢复历史状态"
+                "history_total_cards" -> "对应卡片总数: %d 张"
+                "history_record_count" -> "操作改动记录 (%d/100)"
+                "history_confirm_title" -> "确认恢复至此状态？"
+                "history_confirm_desc" -> "将卡片列表回滚至【%s】操作时的状态（共 %d 张卡片）。"
                 "btn_restore_this" -> "恢复至此状态"
                 "batch_manage" -> "卡片批量整理与管理"
                 "batch_manage_desc" -> "多选、批量删除、批量改分类及批量顺延"
+                "batch_selected_count" -> "已勾选: %d / %d 张"
+                "batch_select_all" -> "全选"
+                "batch_unselect_all" -> "取消全选"
+                "batch_done_back" -> "完成返回"
+                "batch_delete_selected" -> "删除所选"
+                "batch_change_category" -> "修改分类"
+                "batch_extend_date" -> "顺延到期日"
+                "batch_clear_all" -> "清空全部"
+                "batch_delete_confirm_title" -> "确认批量删除"
+                "batch_delete_confirm_desc" -> "确定要删除选中的 %d 张卡片吗？此操作不可逆（已自动备份）。"
+                "batch_clear_confirm_title" -> "危险：确认清空全部卡片？"
+                "batch_clear_confirm_desc" -> "将彻底清空当前所有卡片数据！系统已为您自动快照备份，随时可在“我的”页面恢复。"
+                "batch_category_confirm_title" -> "批量修改分类"
+                "batch_category_confirm_desc" -> "将选中的 %d 张卡片统一更改分类为："
+                "batch_extend_confirm_title" -> "批量顺延到期日"
+                "batch_extend_confirm_desc" -> "将根据选中 %d 张卡片各自设定的【提醒/续期间隔天数】，统一向后顺延计算新的到期日。"
                 "biometric_title" -> "应用生物识别锁 (指纹/面容)"
                 "biometric_desc" -> "开启后启动应用需进行身份验证"
                 "data_backup" -> "数据备份与表格导入导出"
@@ -454,6 +591,14 @@ object StringsProvider {
                 "restore_backup" -> "恢复上次备份"
                 "theme_setting" -> "软件外观主题设置"
                 "lang_setting" -> "软件语言设置 (Language)"
+                "theme_default" -> "默认明亮"
+                "theme_dark" -> "深色夜间"
+                "theme_ocean" -> "静谧海洋"
+                "theme_dynamic" -> "动态炫彩 ✨"
+                "theme_star_space" -> "深空星海 🌌"
+                "theme_star_aurora" -> "极光星穹 ✨"
+                "theme_anime_sakura" -> "落樱物语 🌸"
+                "theme_anime_cyber" -> "赛博霓虹 ⚡"
                 "all" -> "全部"
                 "bank_card" -> "银行卡"
                 "sim_card" -> "电话卡"
@@ -480,15 +625,15 @@ object StringsProvider {
     }
 }
 
-enum class AppTheme(val displayName: String, val isDynamic: Boolean) {
-    DEFAULT("默认明亮", false),
-    DARK("深色夜间", false),
-    OCEAN("静谧海洋", false),
-    DYNAMIC_GRADIENT("动态炫彩 ✨", true),
-    STAR_DEEP_SPACE("深空星海 🌌", false),
-    STAR_AURORA("极光星穹 ✨", true),
-    ANIME_SAKURA("落樱物语 🌸", true),
-    ANIME_CYBER("赛博霓虹 ⚡", false)
+enum class AppTheme(val key: String, val isDynamic: Boolean) {
+    DEFAULT("theme_default", false),
+    DARK("theme_dark", false),
+    OCEAN("theme_ocean", false),
+    DYNAMIC_GRADIENT("theme_dynamic", true),
+    STAR_DEEP_SPACE("theme_star_space", false),
+    STAR_AURORA("theme_star_aurora", true),
+    ANIME_SAKURA("theme_anime_sakura", true),
+    ANIME_CYBER("theme_anime_cyber", false)
 }
 
 fun parseColorHex(hexString: String): Color {
@@ -584,14 +729,12 @@ object CardStorage {
         return parseJsonToCards(jsonStr)
     }
 
-    // 记录最近 100 条变动栈
     private fun pushHistory(context: Context, action: String, currentCards: List<CardItem>) {
         val historyList = loadHistory(context).toMutableList()
         historyList.add(0, OperationHistoryItem(
             description = action,
             snapshotCards = currentCards
         ))
-        // 限制最多保留 100 条
         val trimmedList = historyList.take(100)
         saveHistoryList(context, trimmedList)
     }
@@ -740,10 +883,35 @@ object CardStorage {
         sp.edit().putString(KEY_LANGUAGE, lang.name).apply()
     }
 
+    // 根据操作系统语言自动识别默认语言
     fun loadLanguage(context: Context): AppLanguage {
         val sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        val name = sp.getString(KEY_LANGUAGE, AppLanguage.ZH_CN.name)
-        return try { AppLanguage.valueOf(name!!) } catch (e: Exception) { AppLanguage.ZH_CN }
+        val saved = sp.getString(KEY_LANGUAGE, null)
+        if (saved != null) {
+            return try { AppLanguage.valueOf(saved) } catch (e: Exception) { detectSystemDefaultLanguage() }
+        }
+        return detectSystemDefaultLanguage()
+    }
+
+    private fun detectSystemDefaultLanguage(): AppLanguage {
+        val locale = Locale.getDefault()
+        val lang = locale.language.lowercase(Locale.ROOT)
+        val script = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) locale.script.lowercase(Locale.ROOT) else ""
+        val country = locale.country.uppercase(Locale.ROOT)
+
+        return when {
+            lang == "zh" -> {
+                if (script.contains("hant") || country == "TW" || country == "HK" || country == "MO") {
+                    AppLanguage.ZH_TW
+                } else {
+                    AppLanguage.ZH_CN
+                }
+            }
+            lang == "ja" -> AppLanguage.JA
+            lang == "pt" -> AppLanguage.PT
+            lang == "en" -> AppLanguage.EN
+            else -> AppLanguage.EN
+        }
     }
 
     fun setBiometricEnabled(context: Context, enabled: Boolean) {
@@ -967,7 +1135,7 @@ fun MainTabContainer() {
     var filterMenuExpanded by remember { mutableStateOf(false) }
 
     var isBatchManaging by remember { mutableStateOf(false) }
-    var isViewingHistory by remember { mutableStateOf(false) } // 历史操作时光机页面状态
+    var isViewingHistory by remember { mutableStateOf(false) }
     var importPendingCards by remember { mutableStateOf<List<CardItem>?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
 
@@ -1537,7 +1705,6 @@ fun MainTabContainer() {
     }
 }
 
-// 100条操作记录时光机界面
 @Composable
 fun HistoryTimelineScreen(
     currentLanguage: AppLanguage,
@@ -1562,12 +1729,12 @@ fun HistoryTimelineScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "操作改动记录 (${historyList.size}/100)",
+                String.format(StringsProvider.get("history_record_count", currentLanguage), historyList.size),
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
             Button(onClick = onBack, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                Text("返回")
+                Text(StringsProvider.get("back", currentLanguage))
             }
         }
 
@@ -1598,7 +1765,7 @@ fun HistoryTimelineScreen(
                                 Text(item.description, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(sdf.format(Date(item.timestamp)), fontSize = 11.sp, color = Color.Gray)
-                                Text("对应卡片总数: ${item.snapshotCards.size} 张", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                Text(String.format(StringsProvider.get("history_total_cards", currentLanguage), item.snapshotCards.size), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                             }
                             OutlinedButton(
                                 onClick = { rollbackConfirmItem = item },
@@ -1617,8 +1784,8 @@ fun HistoryTimelineScreen(
         val item = rollbackConfirmItem!!
         AlertDialog(
             onDismissRequest = { rollbackConfirmItem = null },
-            title = { Text("确认恢复至此状态？", fontWeight = FontWeight.Bold) },
-            text = { Text("将卡片列表回滚至【${sdf.format(Date(item.timestamp))}】操作时的状态（共 ${item.snapshotCards.size} 张卡片）。") },
+            title = { Text(StringsProvider.get("history_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("history_confirm_desc", currentLanguage), sdf.format(Date(item.timestamp)), item.snapshotCards.size)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -1656,6 +1823,16 @@ fun BatchManagementScreen(
 
     val isAllSelected = cardList.isNotEmpty() && selectedIds.size == cardList.size
 
+    val presetCategories = remember(currentLanguage) {
+        listOf(
+            StringsProvider.get("bank_card", currentLanguage),
+            StringsProvider.get("sim_card", currentLanguage),
+            StringsProvider.get("email", currentLanguage),
+            StringsProvider.get("account", currentLanguage),
+            StringsProvider.get("other", currentLanguage)
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1668,7 +1845,7 @@ fun BatchManagementScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "已勾选: ${selectedIds.size} / ${cardList.size} 张",
+                String.format(StringsProvider.get("batch_selected_count", currentLanguage), selectedIds.size, cardList.size),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -1679,14 +1856,14 @@ fun BatchManagementScreen(
                     },
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
-                    Text(if (isAllSelected) "取消全选" else "全选", fontSize = 12.sp)
+                    Text(if (isAllSelected) StringsProvider.get("batch_unselect_all", currentLanguage) else StringsProvider.get("batch_select_all", currentLanguage), fontSize = 12.sp)
                 }
 
                 Button(
                     onClick = onBack,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    Text("完成返回", fontSize = 12.sp)
+                    Text(StringsProvider.get("batch_done_back", currentLanguage), fontSize = 12.sp)
                 }
             }
         }
@@ -1703,7 +1880,7 @@ fun BatchManagementScreen(
             ) {
                 Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("删除所选", fontSize = 12.sp)
+                Text(StringsProvider.get("batch_delete_selected", currentLanguage), fontSize = 12.sp)
             }
 
             OutlinedButton(
@@ -1713,7 +1890,7 @@ fun BatchManagementScreen(
             ) {
                 Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("修改分类", fontSize = 12.sp)
+                Text(StringsProvider.get("batch_change_category", currentLanguage), fontSize = 12.sp)
             }
 
             OutlinedButton(
@@ -1723,7 +1900,7 @@ fun BatchManagementScreen(
             ) {
                 Icon(Icons.Default.Update, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("顺延到期日", fontSize = 12.sp)
+                Text(StringsProvider.get("batch_extend_date", currentLanguage), fontSize = 12.sp)
             }
 
             OutlinedButton(
@@ -1731,7 +1908,7 @@ fun BatchManagementScreen(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
             ) {
-                Text("清空全部", fontSize = 12.sp)
+                Text(StringsProvider.get("batch_clear_all", currentLanguage), fontSize = 12.sp)
             }
         }
 
@@ -1739,7 +1916,7 @@ fun BatchManagementScreen(
 
         if (cardList.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("当前无任何卡片", color = Color.Gray)
+                Text(StringsProvider.get("empty_data", currentLanguage), color = Color.Gray)
             }
         } else {
             val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
@@ -1797,8 +1974,8 @@ fun BatchManagementScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("确认批量删除", fontWeight = FontWeight.Bold) },
-            text = { Text("确定要删除选中的 ${selectedIds.size} 张卡片吗？此操作不可逆（已自动备份）。") },
+            title = { Text(StringsProvider.get("batch_delete_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("batch_delete_confirm_desc", currentLanguage), selectedIds.size)) },
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -1821,8 +1998,8 @@ fun BatchManagementScreen(
     if (showClearAllConfirm) {
         AlertDialog(
             onDismissRequest = { showClearAllConfirm = false },
-            title = { Text("危险：确认清空全部卡片？", fontWeight = FontWeight.Bold) },
-            text = { Text("将彻底清空当前所有卡片数据！系统已为您自动快照备份，随时可在“我的”页面恢复。") },
+            title = { Text(StringsProvider.get("batch_clear_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(StringsProvider.get("batch_clear_confirm_desc", currentLanguage)) },
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -1832,7 +2009,7 @@ fun BatchManagementScreen(
                         showClearAllConfirm = false
                     }
                 ) {
-                    Text("清空全部")
+                    Text(StringsProvider.get("batch_clear_all", currentLanguage))
                 }
             },
             dismissButton = {
@@ -1842,19 +2019,18 @@ fun BatchManagementScreen(
     }
 
     if (showBatchCategoryDialog) {
-        val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
-        var targetCat by remember { mutableStateOf(categories[0]) }
+        var targetCat by remember { mutableStateOf(presetCategories[0]) }
         var isCustomCat by remember { mutableStateOf(false) }
         var customCatInput by remember { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = { showBatchCategoryDialog = false },
-            title = { Text("批量修改分类", fontWeight = FontWeight.Bold) },
+            title = { Text(StringsProvider.get("batch_category_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("将选中的 ${selectedIds.size} 张卡片统一更改分类为：")
+                    Text(String.format(StringsProvider.get("batch_category_confirm_desc", currentLanguage), selectedIds.size))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        categories.forEach { cat ->
+                        presetCategories.forEach { cat ->
                             FilterChip(
                                 selected = !isCustomCat && targetCat == cat,
                                 onClick = {
@@ -1867,14 +2043,14 @@ fun BatchManagementScreen(
                         FilterChip(
                             selected = isCustomCat,
                             onClick = { isCustomCat = true },
-                            label = { Text("自定义") }
+                            label = { Text(StringsProvider.get("custom_category", currentLanguage)) }
                         )
                     }
                     if (isCustomCat) {
                         OutlinedTextField(
                             value = customCatInput,
                             onValueChange = { customCatInput = it },
-                            label = { Text("输入新分类名") },
+                            label = { Text(StringsProvider.get("custom_category_hint", currentLanguage)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1904,8 +2080,8 @@ fun BatchManagementScreen(
     if (showBatchExtendDialog) {
         AlertDialog(
             onDismissRequest = { showBatchExtendDialog = false },
-            title = { Text("批量顺延到期日", fontWeight = FontWeight.Bold) },
-            text = { Text("将根据选中 ${selectedIds.size} 张卡片各自设定的【提醒/续期间隔天数】，统一向后顺延计算新的到期日。") },
+            title = { Text(StringsProvider.get("batch_extend_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("batch_extend_confirm_desc", currentLanguage), selectedIds.size)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -2748,11 +2924,11 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v4.2", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("卡片提醒助手 v4.4", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("已安全管理 $cardCount 张卡片", color = Color.Gray, fontSize = 13.sp)
         }
 
-        // 100条操作记录时光机入口
+        // 操作历史时光机入口
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2938,7 +3114,7 @@ fun ProfileScreen(
             }
         }
 
-        // 外观主题
+        // 外观主题设置
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
@@ -2960,7 +3136,7 @@ fun ProfileScreen(
                             selected = currentTheme == theme,
                             onClick = { onThemeChanged(theme) },
                             label = { 
-                                Text(theme.displayName) 
+                                Text(StringsProvider.get(theme.key, currentLanguage)) 
                             },
                             leadingIcon = {
                                 if (currentTheme == theme) {
