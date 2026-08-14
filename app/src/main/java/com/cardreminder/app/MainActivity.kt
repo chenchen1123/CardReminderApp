@@ -240,14 +240,15 @@ object CardStorage {
     }
 }
 
-// 导出与导入 CSV 处理工具类
+// 导出与导入 CSV 处理工具类（全面修复权限与分享路径问题）
 object ExcelExportImportHelper {
     private val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     fun exportToCsv(context: Context, cards: List<CardItem>) {
         try {
+            val exportDir = File(context.filesDir, "exports").apply { mkdirs() }
             val fileName = "卡片数据备份_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())}.csv"
-            val file = File(context.cacheDir, fileName)
+            val file = File(exportDir, fileName)
             val outputStream = FileOutputStream(file)
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
@@ -274,20 +275,21 @@ object ExcelExportImportHelper {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/csv"
                 putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "卡片数据备份")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(Intent.createChooser(intent, "导出/分享卡片表格"))
 
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "导出失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
     }
 
     fun exportTemplate(context: Context) {
         try {
-            val fileName = "卡片导入标准模板.csv"
-            val file = File(context.cacheDir, fileName)
+            val exportDir = File(context.filesDir, "exports").apply { mkdirs() }
+            val file = File(exportDir, "卡片导入标准模板.csv")
             val outputStream = FileOutputStream(file)
             
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
@@ -303,12 +305,13 @@ object ExcelExportImportHelper {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/csv"
                 putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "卡片导入标准模板")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(intent, "获取标准导入模板"))
+            context.startActivity(Intent.createChooser(intent, "下载/保存标准导入模板"))
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "生成模板失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "生成模板失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -878,7 +881,6 @@ fun MainTabContainer() {
     }
 }
 
-// 首页分类：显示卡片张数及临期/过期提醒数量
 @Composable
 fun CategorizedHomeScreen(cardList: List<CardItem>, onEdit: (CardItem) -> Unit) {
     val categories = listOf("银行卡", "电话卡", "邮箱", "账号", "其他")
@@ -1013,11 +1015,11 @@ fun HorizontalCardItem(card: CardItem, onClick: () -> Unit) {
                 }
 
                 if (card.cardNumber.isNotBlank()) {
-                    Text(card.cardNumber, fontSize = 12.sp, color = textColor.copy(alpha = 0.8f), maxLines = 1)
+                    Text(card.cardNumber, fontSize = 12.sp, color = textColor.copy(alpha = 0.85f), maxLines = 1)
                 }
 
                 if (card.note.isNotBlank()) {
-                    Text("备注: ${card.note}", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f), maxLines = 1)
+                    Text("备注: ${card.note}", fontSize = 11.sp, color = textColor.copy(alpha = 0.75f), maxLines = 1)
                 }
                 Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Bold)
             }
@@ -1133,6 +1135,9 @@ fun SwipeableCardItem(
                 }
 
                 val textColor = if (isDarkBg) Color.White else Color.Black
+                // 置顶与删除按钮高对比度颜色
+                val iconActionColor = if (isDarkBg) Color.White.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.65f)
+                val iconPinnedActiveColor = if (isDarkBg) Color(0xFFFFD54F) else MaterialTheme.colorScheme.primary
 
                 Column(
                     modifier = Modifier
@@ -1152,7 +1157,6 @@ fun SwipeableCardItem(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(card.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
                             
-                            // 临期状态显式标签
                             if (diffDays < 0) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(color = Color(0xFFE53935), shape = RoundedCornerShape(4.dp)) {
@@ -1171,18 +1175,18 @@ fun SwipeableCardItem(
                                 Icon(
                                     imageVector = if (card.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                                     contentDescription = "置顶",
-                                    tint = if (card.isPinned) MaterialTheme.colorScheme.primary else textColor.copy(alpha = 0.6f)
+                                    tint = if (card.isPinned) iconPinnedActiveColor else iconActionColor
                                 )
                             }
                             IconButton(onClick = onDelete) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = textColor.copy(alpha = 0.6f))
+                                Icon(Icons.Default.DeleteOutline, contentDescription = "删除", tint = iconActionColor)
                             }
                         }
                     }
 
                     if (card.cardNumber.isNotBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = textColor.copy(alpha = 0.85f), fontWeight = FontWeight.Medium)
+                        Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = textColor.copy(alpha = 0.88f), fontWeight = FontWeight.Medium)
                     }
 
                     if (card.note.isNotBlank()) {
@@ -1202,7 +1206,7 @@ fun SwipeableCardItem(
                             }
                         }
                         if (!expandedNote) {
-                            Text("点击查看备注 (长按可置顶)...", fontSize = 11.sp, color = textColor.copy(alpha = 0.6f))
+                            Text("点击查看备注 (长按可置顶)...", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
                         }
                     }
 
@@ -1216,7 +1220,7 @@ fun SwipeableCardItem(
                     ) {
                         Column {
                             Text("到期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                            Text("提醒间隔: ${if(card.intervalDays > 0) "${card.intervalDays}天" else "不提醒"}", fontSize = 12.sp, color = textColor.copy(alpha = 0.8f))
+                            Text("提醒间隔: ${if(card.intervalDays > 0) "${card.intervalDays}天" else "不提醒"}", fontSize = 12.sp, color = textColor.copy(alpha = 0.82f))
                         }
 
                         val updateBtnContainerColor = if (isDarkBg) Color.White else Color(0xFF1E88E5)
@@ -1554,7 +1558,7 @@ fun ProfileScreen(
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("卡片提醒助手 v3.2", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("卡片提醒助手 v3.3", fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text("已安全管理 $cardCount 张卡片", color = Color.Gray, fontSize = 13.sp)
         }
 
