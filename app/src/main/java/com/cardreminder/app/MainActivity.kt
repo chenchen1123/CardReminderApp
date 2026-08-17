@@ -158,7 +158,7 @@ object StringsProvider {
                 "batch_category_confirm_title" -> "批量修改分類"
                 "batch_category_confirm_desc" -> "將選中的 %d 張卡片統一更改分類為："
                 "batch_extend_confirm_title" -> "批量順延到期日"
-                "batch_extend_confirm_desc" -> "將根據選中 %d 張卡片各自設定的【提醒/續期間隔天數】，統向後順延計算新的到期日。"
+                "batch_extend_confirm_desc" -> "將根據選中 %d 張卡片各自設定的【提醒/續期間隔天數】，統一向後順延計算新的到期日。"
                 "biometric_title" -> "應用生物識別鎖 (指紋/面容)"
                 "biometric_desc" -> "開啟後啟動應用需進行身分驗證"
                 "data_backup" -> "數據備份與表格導入導出"
@@ -1720,6 +1720,411 @@ fun MainTabContainer() {
                 TextButton(onClick = { deletingCard = null }) {
                     Text(StringsProvider.get("cancel", currentLanguage))
                 }
+            }
+        )
+    }
+}
+
+@Composable
+fun HistoryTimelineScreen(
+    currentLanguage: AppLanguage,
+    onBack: () -> Unit,
+    onRollbackState: (List<CardItem>) -> Unit
+) {
+    BackHandler { onBack() }
+    val context = LocalContext.current
+    val historyList = remember { CardStorage.loadHistory(context) }
+    var rollbackConfirmItem by remember { mutableStateOf<OperationHistoryItem?>(null) }
+    val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                String.format(StringsProvider.get("history_record_count", currentLanguage), historyList.size),
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+            Button(onClick = onBack, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                Text(StringsProvider.get("back", currentLanguage))
+            }
+        }
+
+        HorizontalDivider()
+
+        if (historyList.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(StringsProvider.get("empty_history", currentLanguage), color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(historyList, key = { it.id }) { item ->
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(item.description, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(sdf.format(Date(item.timestamp)), fontSize = 11.sp, color = Color.Gray)
+                                Text(String.format(StringsProvider.get("history_total_cards", currentLanguage), item.snapshotCards.size), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                            }
+                            OutlinedButton(
+                                onClick = { rollbackConfirmItem = item },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(StringsProvider.get("btn_restore_this", currentLanguage), fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (rollbackConfirmItem != null) {
+        val item = rollbackConfirmItem!!
+        AlertDialog(
+            onDismissRequest = { rollbackConfirmItem = null },
+            title = { Text(StringsProvider.get("history_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("history_confirm_desc", currentLanguage), sdf.format(Date(item.timestamp)), item.snapshotCards.size)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onRollbackState(item.snapshotCards)
+                        rollbackConfirmItem = null
+                    }
+                ) {
+                    Text(StringsProvider.get("confirm", currentLanguage))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { rollbackConfirmItem = null }) {
+                    Text(StringsProvider.get("cancel", currentLanguage))
+                }
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun BatchManagementScreen(
+    cardList: List<CardItem>,
+    currentLanguage: AppLanguage,
+    onBack: () -> Unit,
+    onUpdateCards: (List<CardItem>, String) -> Unit
+) {
+    BackHandler { onBack() }
+
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showClearAllConfirm by remember { mutableStateOf(false) }
+    var showBatchCategoryDialog by remember { mutableStateOf(false) }
+    var showBatchExtendDialog by remember { mutableStateOf(false) }
+
+    val isAllSelected = cardList.isNotEmpty() && selectedIds.size == cardList.size
+
+    val presetCategories = remember(currentLanguage) {
+        listOf(
+            StringsProvider.get("bank_card", currentLanguage),
+            StringsProvider.get("sim_card", currentLanguage),
+            StringsProvider.get("email", currentLanguage),
+            StringsProvider.get("account", currentLanguage),
+            StringsProvider.get("other", currentLanguage)
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                String.format(StringsProvider.get("batch_selected_count", currentLanguage), selectedIds.size, cardList.size),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        selectedIds = if (isAllSelected) emptySet() else cardList.map { it.id }.toSet()
+                    },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(if (isAllSelected) StringsProvider.get("batch_unselect_all", currentLanguage) else StringsProvider.get("batch_select_all", currentLanguage), fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = onBack,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(StringsProvider.get("batch_done_back", currentLanguage), fontSize = 12.sp)
+                }
+            }
+        }
+
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Button(
+                onClick = { showDeleteConfirm = true },
+                enabled = selectedIds.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(StringsProvider.get("batch_delete_selected", currentLanguage), fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = { showBatchCategoryDialog = true },
+                enabled = selectedIds.isNotEmpty(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(StringsProvider.get("batch_change_category", currentLanguage), fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = { showBatchExtendDialog = true },
+                enabled = selectedIds.isNotEmpty(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Update, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(StringsProvider.get("batch_extend_date", currentLanguage), fontSize = 12.sp)
+            }
+
+            OutlinedButton(
+                onClick = { showClearAllConfirm = true },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(StringsProvider.get("batch_clear_all", currentLanguage), fontSize = 12.sp)
+            }
+        }
+
+        HorizontalDivider()
+
+        if (cardList.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(StringsProvider.get("empty_data", currentLanguage), color = Color.Gray)
+            }
+        } else {
+            val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(cardList, key = { it.id }) { card ->
+                    val isChecked = selectedIds.contains(card.id)
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedIds = if (isChecked) selectedIds - card.id else selectedIds + card.id
+                            },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checked ->
+                                        selectedIds = if (checked) selectedIds + card.id else selectedIds - card.id
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        SuggestionChip(
+                                            onClick = {},
+                                            label = { Text(card.category, fontSize = 11.sp) }
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(card.title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    }
+                                    if (card.cardNumber.isNotBlank()) {
+                                        Text(card.cardNumber, fontSize = 12.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                            Text("${StringsProvider.get("expire_date", currentLanguage)}: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(StringsProvider.get("batch_delete_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("batch_delete_confirm_desc", currentLanguage), selectedIds.size)) },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        val remaining = cardList.filter { !selectedIds.contains(it.id) }
+                        onUpdateCards(remaining, "批量删除 ${selectedIds.size} 张卡片")
+                        selectedIds = emptySet()
+                        showDeleteConfirm = false
+                    }
+                ) {
+                    Text(StringsProvider.get("confirm", currentLanguage))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
+            }
+        )
+    }
+
+    if (showClearAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirm = false },
+            title = { Text(StringsProvider.get("batch_clear_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(StringsProvider.get("batch_clear_confirm_desc", currentLanguage)) },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        onUpdateCards(emptyList(), "清空全部卡片数据")
+                        selectedIds = emptySet()
+                        showClearAllConfirm = false
+                    }
+                ) {
+                    Text(StringsProvider.get("batch_clear_all", currentLanguage))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllConfirm = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
+            }
+        )
+    }
+
+    if (showBatchCategoryDialog) {
+        var targetCat by remember { mutableStateOf(presetCategories[0]) }
+        var isCustomCat by remember { mutableStateOf(false) }
+        var customCatInput by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showBatchCategoryDialog = false },
+            title = { Text(StringsProvider.get("batch_category_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(String.format(StringsProvider.get("batch_category_confirm_desc", currentLanguage), selectedIds.size))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        presetCategories.forEach { cat ->
+                            FilterChip(
+                                selected = !isCustomCat && targetCat == cat,
+                                onClick = {
+                                    isCustomCat = false
+                                    targetCat = cat
+                                },
+                                label = { Text(cat) }
+                            )
+                        }
+                        FilterChip(
+                            selected = isCustomCat,
+                            onClick = { isCustomCat = true },
+                            label = { Text(StringsProvider.get("custom_category", currentLanguage)) }
+                        )
+                    }
+                    if (isCustomCat) {
+                        OutlinedTextField(
+                            value = customCatInput,
+                            onValueChange = { customCatInput = it },
+                            label = { Text(StringsProvider.get("custom_category_hint", currentLanguage)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val finalCat = if (isCustomCat && customCatInput.isNotBlank()) customCatInput.trim() else targetCat
+                        val updated = cardList.map {
+                            if (selectedIds.contains(it.id)) it.copy(category = finalCat) else it
+                        }
+                        onUpdateCards(updated, "批量修改 ${selectedIds.size} 张卡片分类为 [$finalCat]")
+                        showBatchCategoryDialog = false
+                    }
+                ) {
+                    Text(StringsProvider.get("confirm", currentLanguage))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchCategoryDialog = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
+            }
+        )
+    }
+
+    if (showBatchExtendDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatchExtendDialog = false },
+            title = { Text(StringsProvider.get("batch_extend_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("batch_extend_confirm_desc", currentLanguage), selectedIds.size)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val updated = cardList.map { card ->
+                            if (selectedIds.contains(card.id)) {
+                                val nextCal = Calendar.getInstance().apply {
+                                    timeInMillis = card.expiryDateMillis
+                                    add(Calendar.DAY_OF_MONTH, if (card.intervalDays > 0) card.intervalDays else 30)
+                                }
+                                card.copy(expiryDateMillis = nextCal.timeInMillis)
+                            } else {
+                                card
+                            }
+                        }
+                        onUpdateCards(updated, "批量顺延 ${selectedIds.size} 张卡片到期日")
+                        showBatchExtendDialog = false
+                    }
+                ) {
+                    Text(StringsProvider.get("confirm", currentLanguage))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchExtendDialog = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
             }
         )
     }
