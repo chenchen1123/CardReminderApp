@@ -1,13 +1,7 @@
-import java.text.SimpleDateFormat
-import java.util.Date
-
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
 }
-
-val timeVersionCode = SimpleDateFormat("yyyyMMdd").format(Date()).toInt()
-val timeVersionName = "2.6.${SimpleDateFormat("MMddHH").format(Date())}"
 
 android {
     namespace = "com.cardreminder.app"
@@ -17,28 +11,37 @@ android {
         applicationId = "com.cardreminder.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = timeVersionCode
-        versionName = timeVersionName
+        versionCode = 1
+        versionName = "V1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
-    // 强行指定 debug 和 release 均使用统一的默认调试签名，彻底消除 GitHub 构建签名冲突
-    buildTypes {
+    signingConfigs {
         getByName("debug") {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            // 使用标准调试签名
         }
-        getByName("release") {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+        create("release") {
+            // 为避免打包签名报错，release 默认继承 debug 签名
+            initWith(getByName("debug"))
         }
     }
 
-    buildFeatures {
-        compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     compileOptions {
@@ -48,19 +51,30 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    buildFeatures {
+        compose = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.8"
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.material.icons.extended)
 
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-
-    implementation("io.coil-kt:coil-compose:2.6.0")
+    // Coil 图片加载库
+    implementation("io.coil-kt:coil-compose:2.5.0")
 }
