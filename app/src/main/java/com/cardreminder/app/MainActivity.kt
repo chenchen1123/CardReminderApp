@@ -1677,410 +1677,310 @@ fun MainTabContainer() {
                 }
             }
         }
-
-        if (readOnlyDetailCard != null) {
-            val card = readOnlyDetailCard!!
-            val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
-            Dialog(onDismissRequest = { readOnlyDetailCard = null }) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(20.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(StringsProvider.get("card_detail_readonly", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            SuggestionChip(onClick = {}, label = { Text(card.category) })
-                        }
-                        HorizontalDivider()
-                        Text("名称: ${card.title}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        if (card.cardNumber.isNotBlank()) {
-                            Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = Color.Gray)
-                        }
-                        Text("到期日期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp)
-                        Text("提醒间隔: ${if (card.intervalDays > 0) "${card.intervalDays} 天" else "不提醒"}", fontSize = 14.sp)
-                        if (card.note.isNotBlank()) {
-                            Text("备注信息: ${card.note}", fontSize = 14.sp)
-                        }
-                        if (card.photoPaths.isNotEmpty()) {
-                            Text("实物照片预览 (${card.photoPaths.size}张):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            val pagerState = rememberPagerState { card.photoPaths.size }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                HorizontalPager(
-                                    state = pagerState,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(180.dp)
-                                ) { page ->
-                                    AsyncImage(
-                                        model = card.photoPaths[page],
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = ContentScale.Fit
-                                    )
-                                }
-                                Text("${pagerState.currentPage + 1} / ${card.photoPaths.size}", fontSize = 11.sp, color = Color.Gray)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Button(
-                            onClick = { readOnlyDetailCard = null },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(StringsProvider.get("confirm", currentLanguage))
-                        }
-                    }
-                }
-            }
-        }
-
-        if (confirmEditCard != null) {
-            val card = confirmEditCard!!
-            AlertDialog(
-                onDismissRequest = { confirmEditCard = null },
-                title = { Text(StringsProvider.get("confirm_edit_title", currentLanguage), fontWeight = FontWeight.Bold) },
-                text = { Text(String.format(StringsProvider.get("confirm_edit_desc", currentLanguage), card.title)) },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            editingCard = card
-                            confirmEditCard = null
-                            selectedTab = 2
-                        }
-                    ) {
-                        Text(StringsProvider.get("confirm", currentLanguage))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirmEditCard = null }) {
-                        Text(StringsProvider.get("cancel", currentLanguage))
-                    }
-                }
-            )
-        }
-
-        if (importPendingCards != null) {
-            val incomingCards = importPendingCards!!
-            AlertDialog(
-                onDismissRequest = { importPendingCards = null },
-                title = { Text("选择导入模式", fontWeight = FontWeight.Bold) },
-                text = {
-                    Text("成功解析出 ${incomingCards.size} 张卡片数据。\n请选择如何更新现有卡片？（系统将自动备份当前数据以便恢复）")
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            CardStorage.backupCurrentCards(context, cardList)
-                            val merged = cardList.toMutableList()
-                            incomingCards.forEach { inc ->
-                                val existsIndex = merged.indexOfFirst { it.title == inc.title && it.cardNumber == inc.cardNumber }
-                                if (existsIndex >= 0) {
-                                    merged[existsIndex] = inc
-                                } else {
-                                    merged.add(inc)
-                                }
-                            }
-                            cardList = merged
-                            CardStorage.saveCards(context, merged, "合并导入 ${incomingCards.size} 张卡片")
-                            Toast.makeText(context, "合并导入完成！已备份旧数据", Toast.LENGTH_SHORT).show()
-                            importPendingCards = null
-                        }
-                    ) {
-                        Text("合并追加")
-                    }
-                },
-                dismissButton = {
-                    OutlinedButton(
-                        onClick = {
-                            CardStorage.backupCurrentCards(context, cardList)
-                            cardList = incomingCards
-                            CardStorage.saveCards(context, incomingCards, "清空覆盖导入 ${incomingCards.size} 张卡片")
-                            Toast.makeText(context, "已清空并覆盖导入！已备份旧数据", Toast.LENGTH_SHORT).show()
-                            importPendingCards = null
-                        }
-                    ) {
-                        Text("清空覆盖")
-                    }
-                }
-            )
-        }
-
-        if (showRestoreConfirmDialog) {
-            val (backupCards, backupTime) = CardStorage.getBackupInfo(context)
-            AlertDialog(
-                onDismissRequest = { showRestoreConfirmDialog = false },
-                title = { Text("恢复历史备份数据", fontWeight = FontWeight.Bold) },
-                text = {
-                    if (backupCards.isEmpty() || backupTime == null) {
-                        Text("暂无历史导入备份记录。")
-                    } else {
-                        Text("找到于【$backupTime】自动保存的备份，包含 ${backupCards.size} 张卡片。\n确定要回滚恢复吗？当前数据将被替换。")
-                    }
-                },
-                confirmButton = {
-                    if (backupCards.isNotEmpty()) {
-                        Button(
-                            onClick = {
-                                cardList = backupCards
-                                CardStorage.saveCards(context, backupCards, "从上次备份回滚数据")
-                                Toast.makeText(context, StringsProvider.get("toast_restored", currentLanguage), Toast.LENGTH_SHORT).show()
-                                showRestoreConfirmDialog = false
-                            }
-                        ) {
-                            Text(StringsProvider.get("confirm", currentLanguage))
-                        }
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showRestoreConfirmDialog = false }) {
-                        Text(StringsProvider.get("cancel", currentLanguage))
-                    }
-                }
-            )
-        }
-
-        if (operateConfirmCard != null) {
-            val card = operateConfirmCard!!
-            val interval = card.intervalDays
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-            val nextCalendarByExpiry = Calendar.getInstance().apply {
-                timeInMillis = card.expiryDateMillis
-                add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
-            }
-            val nextExpiryDateStr = sdf.format(nextCalendarByExpiry.time)
-
-            val nextCalendarByToday = Calendar.getInstance().apply {
-                timeInMillis = System.currentTimeMillis()
-                add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
-            }
-            val nextTodayDateStr = sdf.format(nextCalendarByToday.time)
-
-            AlertDialog(
-                onDismissRequest = { operateConfirmCard = null },
-                title = { Text(StringsProvider.get("confirm_update_title", currentLanguage), fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(String.format(StringsProvider.get("confirm_update_desc_header", currentLanguage), card.title, interval), fontSize = 13.sp)
-
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                val actionDesc = "基于原到期日顺延 [${card.title}] 至 $nextExpiryDateStr"
-                                val updatedList = cardList.map { item ->
-                                    if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByExpiry.timeInMillis) else item
-                                }
-                                cardList = updatedList
-                                CardStorage.saveCards(context, updatedList, actionDesc)
-                                Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextExpiryDateStr), Toast.LENGTH_SHORT).show()
-                                operateConfirmCard = null
-                            }
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(StringsProvider.get("btn_update_by_expiry", currentLanguage), fontWeight = FontWeight.Bold)
-                                Text("($nextExpiryDateStr)", fontSize = 12.sp)
-                            }
-                        }
-
-                        FilledTonalButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                val actionDesc = "基于今天顺延 [${card.title}] 至 $nextTodayDateStr"
-                                val updatedList = cardList.map { item ->
-                                    if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByToday.timeInMillis) else item
-                                }
-                                cardList = updatedList
-                                CardStorage.saveCards(context, updatedList, actionDesc)
-                                Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextTodayDateStr), Toast.LENGTH_SHORT).show()
-                                operateConfirmCard = null
-                            }
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(StringsProvider.get("btn_update_by_today", currentLanguage), fontWeight = FontWeight.Bold)
-                                Text("($nextTodayDateStr)", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = { operateConfirmCard = null }) {
-                        Text(StringsProvider.get("cancel", currentLanguage))
-                    }
-                }
-            )
-        }
-
-        if (pinDialogCard != null) {
-            val isPinned = pinDialogCard?.isPinned == true
-            val pinActionText = if (!isPinned) StringsProvider.get("pin_action", currentLanguage) else StringsProvider.get("unpin_action", currentLanguage)
-
-            AlertDialog(
-                onDismissRequest = { pinDialogCard = null },
-                title = { Text(StringsProvider.get("pin_title", currentLanguage), fontWeight = FontWeight.Bold) },
-                text = { Text(String.format(StringsProvider.get("pin_desc", currentLanguage), pinDialogCard?.title, pinActionText)) },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            pinDialogCard?.let { card ->
-                                val actionDesc = if (!isPinned) "置顶卡片 [${card.title}]" else "取消置顶 [${card.title}]"
-                                val newList = cardList.map {
-                                    if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
-                                }
-                                cardList = newList
-                                CardStorage.saveCards(context, newList, actionDesc)
-                            }
-                            pinDialogCard = null
-                        }
-                    ) {
-                        Text(pinActionText)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { pinDialogCard = null }) {
-                        Text(StringsProvider.get("cancel", currentLanguage))
-                    }
-                }
-            )
-        }
-
-        if (deletingCard != null) {
-            AlertDialog(
-                onDismissRequest = { deletingCard = null },
-                title = { Text(StringsProvider.get("delete_title", currentLanguage), fontWeight = FontWeight.Bold) },
-                text = { Text(String.format(StringsProvider.get("delete_desc", currentLanguage), deletingCard?.title)) },
-                confirmButton = {
-                    Button(
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        onClick = {
-                            deletingCard?.let { card ->
-                                val newList = cardList.filter { it.id != card.id }
-                                cardList = newList
-                                CardStorage.saveCards(context, newList, "删除卡片 [${card.title}]")
-                                Toast.makeText(context, StringsProvider.get("toast_deleted", currentLanguage), Toast.LENGTH_SHORT).show()
-                            }
-                            deletingCard = null
-                        }
-                    ) {
-                        Text(StringsProvider.get("confirm", currentLanguage))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { deletingCard = null }) {
-                        Text(StringsProvider.get("cancel", currentLanguage))
-                    }
-                }
-            )
-        }
     }
-}
 
-@Composable
-fun HistoryTimelineScreen(
-    currentLanguage: AppLanguage,
-    onBack: () -> Unit,
-    onRollbackState: (List<CardItem>) -> Unit
-) {
-    BackHandler { onBack() }
-    val context = LocalContext.current
-    val historyList = remember { CardStorage.loadHistory(context) }
-    var rollbackConfirmItem by remember { mutableStateOf<OperationHistoryItem?>(null) }
-    val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                String.format(StringsProvider.get("history_record_count", currentLanguage), historyList.size),
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
-            Button(onClick = onBack, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                Text(StringsProvider.get("back", currentLanguage))
-            }
-        }
-
-        HorizontalDivider()
-
-        if (historyList.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(StringsProvider.get("empty_history", currentLanguage), color = Color.Gray)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+    if (readOnlyDetailCard != null) {
+        val card = readOnlyDetailCard!!
+        val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+        Dialog(onDismissRequest = { readOnlyDetailCard = null }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
             ) {
-                items(historyList, key = { it.id }) { item ->
-                    ElevatedCard(
+                Column(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(item.description, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(sdf.format(Date(item.timestamp)), fontSize = 11.sp, color = Color.Gray)
-                                Text(String.format(StringsProvider.get("history_total_cards", currentLanguage), item.snapshotCards.size), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                        Text(StringsProvider.get("card_detail_readonly", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        SuggestionChip(onClick = {}, label = { Text(card.category) })
+                    }
+                    HorizontalDivider()
+                    Text("名称: ${card.title}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (card.cardNumber.isNotBlank()) {
+                        Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = Color.Gray)
+                    }
+                    Text("到期日期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp)
+                    Text("提醒间隔: ${if (card.intervalDays > 0) "${card.intervalDays} 天" else "不提醒"}", fontSize = 14.sp)
+                    if (card.note.isNotBlank()) {
+                        Text("备注信息: ${card.note}", fontSize = 14.sp)
+                    }
+                    if (card.photoPaths.isNotEmpty()) {
+                        Text("实物照片预览 (${card.photoPaths.size}张):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        val pagerState = rememberPagerState { card.photoPaths.size }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp)
+                            ) { page ->
+                                AsyncImage(
+                                    model = card.photoPaths[page],
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Fit
+                                )
                             }
-                            OutlinedButton(
-                                onClick = { rollbackConfirmItem = item },
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Text(StringsProvider.get("btn_restore_this", currentLanguage), fontSize = 12.sp)
-                            }
+                            Text("${pagerState.currentPage + 1} / ${card.photoPaths.size}", fontSize = 11.sp, color = Color.Gray)
                         }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = { readOnlyDetailCard = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(StringsProvider.get("confirm", currentLanguage))
                     }
                 }
             }
         }
     }
 
-    if (rollbackConfirmItem != null) {
-        val item = rollbackConfirmItem!!
+    if (confirmEditCard != null) {
+        val card = confirmEditCard!!
         AlertDialog(
-            onDismissRequest = { rollbackConfirmItem = null },
-            title = { Text(StringsProvider.get("history_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = { Text(String.format(StringsProvider.get("history_confirm_desc", currentLanguage), sdf.format(Date(item.timestamp)), item.snapshotCards.size)) },
+            onDismissRequest = { confirmEditCard = null },
+            title = { Text(StringsProvider.get("confirm_edit_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("confirm_edit_desc", currentLanguage), card.title)) },
             confirmButton = {
                 Button(
                     onClick = {
-                        onRollbackState(item.snapshotCards)
-                        rollbackConfirmItem = null
+                        editingCard = card
+                        confirmEditCard = null
+                        selectedTab = 2
                     }
                 ) {
                     Text(StringsProvider.get("confirm", currentLanguage))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { rollbackConfirmItem = null }) {
+                TextButton(onClick = { confirmEditCard = null }) {
+                    Text(StringsProvider.get("cancel", currentLanguage))
+                }
+            }
+        )
+    }
+
+    if (importPendingCards != null) {
+        val incomingCards = importPendingCards!!
+        AlertDialog(
+            onDismissRequest = { importPendingCards = null },
+            title = { Text("选择导入模式", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("成功解析出 ${incomingCards.size} 张卡片数据。\n请选择如何更新现有卡片？（系统将自动备份当前数据以便恢复）")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        CardStorage.backupCurrentCards(context, cardList)
+                        val merged = cardList.toMutableList()
+                        incomingCards.forEach { inc ->
+                            val existsIndex = merged.indexOfFirst { it.title == inc.title && it.cardNumber == inc.cardNumber }
+                            if (existsIndex >= 0) {
+                                merged[existsIndex] = inc
+                            } else {
+                                merged.add(inc)
+                            }
+                        }
+                        cardList = merged
+                        CardStorage.saveCards(context, merged, "合并导入 ${incomingCards.size} 张卡片")
+                        Toast.makeText(context, "合并导入完成！已备份旧数据", Toast.LENGTH_SHORT).show()
+                        importPendingCards = null
+                    }
+                ) {
+                    Text("合并追加")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        CardStorage.backupCurrentCards(context, cardList)
+                        cardList = incomingCards
+                        CardStorage.saveCards(context, incomingCards, "清空覆盖导入 ${incomingCards.size} 张卡片")
+                        Toast.makeText(context, "已清空并覆盖导入！已备份旧数据", Toast.LENGTH_SHORT).show()
+                        importPendingCards = null
+                    }
+                ) {
+                    Text("清空覆盖")
+                }
+            }
+        )
+    }
+
+    if (showRestoreConfirmDialog) {
+        val (backupCards, backupTime) = CardStorage.getBackupInfo(context)
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirmDialog = false },
+            title = { Text("恢复历史备份数据", fontWeight = FontWeight.Bold) },
+            text = {
+                if (backupCards.isEmpty() || backupTime == null) {
+                    Text("暂无历史导入备份记录。")
+                } else {
+                    Text("找到于【$backupTime】自动保存的备份，包含 ${backupCards.size} 张卡片。\n确定要回滚恢复吗？当前数据将被替换。")
+                }
+            },
+            confirmButton = {
+                if (backupCards.isNotEmpty()) {
+                    Button(
+                        onClick = {
+                            cardList = backupCards
+                            CardStorage.saveCards(context, backupCards, "从上次备份回滚数据")
+                            Toast.makeText(context, StringsProvider.get("toast_restored", currentLanguage), Toast.LENGTH_SHORT).show()
+                            showRestoreConfirmDialog = false
+                        }
+                    ) {
+                        Text(StringsProvider.get("confirm", currentLanguage))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirmDialog = false }) {
+                    Text(StringsProvider.get("cancel", currentLanguage))
+                }
+            }
+        )
+    }
+
+    if (operateConfirmCard != null) {
+        val card = operateConfirmCard!!
+        val interval = card.intervalDays
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+        val nextCalendarByExpiry = Calendar.getInstance().apply {
+            timeInMillis = card.expiryDateMillis
+            add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
+        }
+        val nextExpiryDateStr = sdf.format(nextCalendarByExpiry.time)
+
+        val nextCalendarByToday = Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis()
+            add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
+        }
+        val nextTodayDateStr = sdf.format(nextCalendarByToday.time)
+
+        AlertDialog(
+            onDismissRequest = { operateConfirmCard = null },
+            title = { Text(StringsProvider.get("confirm_update_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(String.format(StringsProvider.get("confirm_update_desc_header", currentLanguage), card.title, interval), fontSize = 13.sp)
+
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            val actionDesc = "基于原到期日顺延 [${card.title}] 至 $nextExpiryDateStr"
+                            val updatedList = cardList.map { item ->
+                                if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByExpiry.timeInMillis) else item
+                            }
+                            cardList = updatedList
+                            CardStorage.saveCards(context, updatedList, actionDesc)
+                            Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextExpiryDateStr), Toast.LENGTH_SHORT).show()
+                            operateConfirmCard = null
+                        }
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(StringsProvider.get("btn_update_by_expiry", currentLanguage), fontWeight = FontWeight.Bold)
+                            Text("($nextExpiryDateStr)", fontSize = 12.sp)
+                        }
+                    }
+
+                    FilledTonalButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            val actionDesc = "基于今天顺延 [${card.title}] 至 $nextTodayDateStr"
+                            val updatedList = cardList.map { item ->
+                                if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByToday.timeInMillis) else item
+                            }
+                            cardList = updatedList
+                            CardStorage.saveCards(context, updatedList, actionDesc)
+                            Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextTodayDateStr), Toast.LENGTH_SHORT).show()
+                            operateConfirmCard = null
+                        }
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(StringsProvider.get("btn_update_by_today", currentLanguage), fontWeight = FontWeight.Bold)
+                            Text("($nextTodayDateStr)", fontSize = 12.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { operateConfirmCard = null }) {
+                    Text(StringsProvider.get("cancel", currentLanguage))
+                }
+            }
+        )
+    }
+
+    if (pinDialogCard != null) {
+        val isPinned = pinDialogCard?.isPinned == true
+        val pinActionText = if (!isPinned) StringsProvider.get("pin_action", currentLanguage) else StringsProvider.get("unpin_action", currentLanguage)
+
+        AlertDialog(
+            onDismissRequest = { pinDialogCard = null },
+            title = { Text(StringsProvider.get("pin_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("pin_desc", currentLanguage), pinDialogCard?.title, pinActionText)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pinDialogCard?.let { card ->
+                            val actionDesc = if (!isPinned) "置顶卡片 [${card.title}]" else "取消置顶 [${card.title}]"
+                            val newList = cardList.map {
+                                if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
+                            }
+                            cardList = newList
+                            CardStorage.saveCards(context, newList, actionDesc)
+                        }
+                        pinDialogCard = null
+                    }
+                ) {
+                    Text(pinActionText)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pinDialogCard = null }) {
+                    Text(StringsProvider.get("cancel", currentLanguage))
+                }
+            }
+        )
+    }
+
+    if (deletingCard != null) {
+        AlertDialog(
+            onDismissRequest = { deletingCard = null },
+            title = { Text(StringsProvider.get("delete_title", currentLanguage), fontWeight = FontWeight.Bold) },
+            text = { Text(String.format(StringsProvider.get("delete_desc", currentLanguage), deletingCard?.title)) },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        deletingCard?.let { card ->
+                            val newList = cardList.filter { it.id != card.id }
+                            cardList = newList
+                            CardStorage.saveCards(context, newList, "删除卡片 [${card.title}]")
+                            Toast.makeText(context, StringsProvider.get("toast_deleted", currentLanguage), Toast.LENGTH_SHORT).show()
+                        }
+                        deletingCard = null
+                    }
+                ) {
+                    Text(StringsProvider.get("confirm", currentLanguage))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingCard = null }) {
                     Text(StringsProvider.get("cancel", currentLanguage))
                 }
             }
@@ -2088,23 +1988,546 @@ fun HistoryTimelineScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun BatchManagementScreen(
+fun CategorizedHomeScreen(
     cardList: List<CardItem>,
     currentLanguage: AppLanguage,
-    onBack: () -> Unit,
-    onUpdateCards: (List<CardItem>, String) -> Unit
+    onCardClick: (CardItem) -> Unit
 ) {
-    BackHandler { onBack() }
+    val defaultCategories = listOf(
+        StringsProvider.get("bank_card", currentLanguage),
+        StringsProvider.get("sim_card", currentLanguage),
+        StringsProvider.get("email", currentLanguage),
+        StringsProvider.get("account", currentLanguage),
+        StringsProvider.get("other", currentLanguage)
+    )
+    val customCategories = cardList.map { it.category }.distinct().filter { !defaultCategories.contains(it) }
+    val categories = defaultCategories + customCategories
+    val now = System.currentTimeMillis()
 
-    var selectedIds by remember { mutableStateOf(setOf<String>()) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-    var showClearAllConfirm by remember { mutableStateOf(false) }
-    var showBatchCategoryDialog by remember { mutableStateOf(false) }
-    var showBatchExtendDialog by remember { mutableStateOf(false) }
+    if (cardList.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(StringsProvider.get("empty_data", currentLanguage), color = Color.Gray)
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            items(categories) { category ->
+                val categoryCards = cardList.filter { it.category == category }.sortedBy { it.expiryDateMillis }
+                if (categoryCards.isNotEmpty()) {
+                    val urgentCount = categoryCards.count {
+                        val diffDays = (it.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
+                        diffDays <= 30
+                    }
 
-    val isAllSelected = cardList.isNotEmpty() && selectedIds.size == cardList.size
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = category,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = if (urgentCount > 0) "共 ${categoryCards.size} 张 · ${urgentCount}张需处理" else "共 ${categoryCards.size} 张",
+                                fontSize = 12.sp,
+                                color = if (urgentCount > 0) Color(0xFFFF9800) else Color.Gray,
+                                fontWeight = if (urgentCount > 0) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(categoryCards) { card ->
+                                HorizontalCardItem(card = card, currentLanguage = currentLanguage, onClick = { onCardClick(card) })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun HorizontalCardItem(card: CardItem, currentLanguage: AppLanguage, onClick: () -> Unit) {
+    val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val now = System.currentTimeMillis()
+    val diffDays = (card.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
+
+    Card(
+        modifier = Modifier
+            .width(220.dp)
+            .height(135.dp)
+            .combinedClickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (card.bgType == "URI") {
+                AsyncImage(
+                    model = card.bgValue,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f))
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(parseColorHex(card.bgValue))
+                )
+            }
+
+            val isDarkBg = card.bgType == "URI" || parseColorHex(card.bgValue).luminance() < 0.5f
+            val textColor = if (isDarkBg) Color.White else Color.Black
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        card.title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        color = textColor,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    if (diffDays < 0) {
+                        Surface(
+                            color = Color(0xFFE53935),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(StringsProvider.get("expired", currentLanguage), color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                        }
+                    } else if (diffDays <= 30) {
+                        Surface(
+                            color = if (diffDays <= 3) Color(0xFFE53935) else Color(0xFFFF9800),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(String.format(StringsProvider.get("days_left", currentLanguage), diffDays), color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                if (card.cardNumber.isNotBlank()) {
+                    Text(card.cardNumber, fontSize = 12.sp, color = textColor.copy(alpha = 0.85f), maxLines = 1)
+                }
+
+                if (card.note.isNotBlank()) {
+                    Text("备注: ${card.note}", fontSize = 11.sp, color = textColor.copy(alpha = 0.75f), maxLines = 1)
+                }
+                Text("${StringsProvider.get("expire_date", currentLanguage)}: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun ListScreen(
+    displayList: List<CardItem>,
+    searchQuery: String,
+    currentLanguage: AppLanguage,
+    onSearchQueryChange: (String) -> Unit,
+    onTogglePin: (CardItem) -> Unit,
+    onLongClickPin: (CardItem) -> Unit,
+    onRequestEdit: (CardItem) -> Unit,
+    onOperated: (CardItem) -> Unit,
+    onDeleteRequest: (CardItem) -> Unit
+) {
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val showScrollToTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            placeholder = { Text(StringsProvider.get("search_hint", currentLanguage)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = null)
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (displayList.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(StringsProvider.get("empty_search", currentLanguage), color = Color.Gray)
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    itemsIndexed(displayList, key = { _, item -> item.id }) { _, card ->
+                        SwipeableCardItem(
+                            card = card,
+                            currentLanguage = currentLanguage,
+                            onTogglePin = { onTogglePin(card) },
+                            onLongClickPin = { onLongClickPin(card) },
+                            onRequestEdit = { onRequestEdit(card) },
+                            onOperated = { onOperated(card) },
+                            onDelete = { onDeleteRequest(card) }
+                        )
+                    }
+                }
+            }
+
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showScrollToTop,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 20.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = null)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun SwipeableCardItem(
+    card: CardItem,
+    currentLanguage: AppLanguage,
+    onTogglePin: () -> Unit,
+    onLongClickPin: () -> Unit,
+    onRequestEdit: () -> Unit,
+    onOperated: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    var expandedNote by remember { mutableStateOf(false) }
+    var isMasked by remember { mutableStateOf(true) }
+    var fullGalleryVisible by remember { mutableStateOf(false) }
+    var initialPhotoIndex by remember { mutableIntStateOf(0) }
+
+    val now = System.currentTimeMillis()
+    val diffDays = (card.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
+
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.StartToEnd || value == SwipeToDismissBoxValue.EndToStart) {
+                onRequestEdit()
+                false
+            } else false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF1E88E5), shape = RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp),
+                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White)
+            }
+        }
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = { expandedNote = !expandedNote },
+                    onLongClick = onLongClickPin
+                ),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                val isDarkBg = if (card.bgType == "URI") true else parseColorHex(card.bgValue).luminance() < 0.5f
+
+                if (card.bgType == "URI") {
+                    AsyncImage(
+                        model = card.bgValue,
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.35f)))
+                } else {
+                    Box(modifier = Modifier.matchParentSize().background(parseColorHex(card.bgValue)))
+                }
+
+                val textColor = if (isDarkBg) Color.White else Color.Black
+                val iconActionColor = if (isDarkBg) Color.White.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.65f)
+                val iconPinnedActiveColor = if (isDarkBg) Color(0xFFFFD54F) else MaterialTheme.colorScheme.primary
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            SuggestionChip(
+                                onClick = {},
+                                label = { Text(card.category, fontSize = 12.sp) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(card.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            
+                            if (diffDays < 0) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(color = Color(0xFFE53935), shape = RoundedCornerShape(4.dp)) {
+                                    Text(StringsProvider.get("expired", currentLanguage), color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                                }
+                            } else if (diffDays <= 30) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(color = if (diffDays <= 3) Color(0xFFE53935) else Color(0xFFFF9800), shape = RoundedCornerShape(4.dp)) {
+                                    Text(String.format(StringsProvider.get("days_left", currentLanguage), diffDays), color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Row {
+                            IconButton(onClick = onTogglePin) {
+                                Icon(
+                                    imageVector = if (card.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                    contentDescription = null,
+                                    tint = if (card.isPinned) iconPinnedActiveColor else iconActionColor
+                                )
+                            }
+                            IconButton(onClick = onDelete) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = iconActionColor)
+                            }
+                        }
+                    }
+
+                    if (card.cardNumber.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val displayedCardNum = if (isMasked && card.cardNumber.length > 6) {
+                            val start = card.cardNumber.take(4)
+                            val end = card.cardNumber.takeLast(4)
+                            "$start **** $end"
+                        } else card.cardNumber
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("卡号: $displayedCardNum", fontSize = 14.sp, color = textColor.copy(alpha = 0.88f), fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(
+                                onClick = { isMasked = !isMasked },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isMasked) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                                    contentDescription = null,
+                                    tint = iconActionColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(card.cardNumber))
+                                    Toast.makeText(context, StringsProvider.get("toast_copied", currentLanguage), Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = null,
+                                    tint = iconActionColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (card.note.isNotBlank() || card.photoPaths.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        androidx.compose.animation.AnimatedVisibility(visible = expandedNote) {
+                            Surface(
+                                color = if (isDarkBg) Color.Black.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.9f),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (card.note.isNotBlank()) {
+                                        Text("备注: ${card.note}", fontSize = 13.sp, color = if (isDarkBg) Color.White else Color.Black)
+                                    }
+                                    if (card.photoPaths.isNotEmpty()) {
+                                        Text("📷 卡片实物照片 (${card.photoPaths.size}张, 点击画廊滑动浏览):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            itemsIndexed(card.photoPaths) { idx, path ->
+                                                AsyncImage(
+                                                    model = path,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(72.dp)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .clickable {
+                                                            initialPhotoIndex = idx
+                                                            fullGalleryVisible = true
+                                                        },
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (!expandedNote) {
+                            Text("点击查看备注与照片 (长按置顶)...", fontSize = 11.sp, color = textColor.copy(alpha = 0.7f))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("${StringsProvider.get("expire_date", currentLanguage)}: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                            Text("${StringsProvider.get("remind_interval", currentLanguage)}: ${if(card.intervalDays > 0) "${card.intervalDays}${StringsProvider.get("day", currentLanguage)}" else StringsProvider.get("no_remind", currentLanguage)}", fontSize = 12.sp, color = textColor.copy(alpha = 0.82f))
+                        }
+
+                        val updateBtnContainerColor = if (isDarkBg) Color.White else Color(0xFF1E88E5)
+                        val updateBtnContentColor = if (isDarkBg) Color.Black else Color.White
+
+                        Button(
+                            onClick = onOperated,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = updateBtnContainerColor,
+                                contentColor = updateBtnContentColor
+                            ),
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Outlined.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(StringsProvider.get("update", currentLanguage), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (fullGalleryVisible && card.photoPaths.isNotEmpty()) {
+        Dialog(
+            onDismissRequest = { fullGalleryVisible = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            val pagerState = rememberPagerState(initialPage = initialPhotoIndex) { card.photoPaths.size }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f))
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        AsyncImage(
+                            model = card.photoPaths[page],
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp, start = 20.dp, end = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${pagerState.currentPage + 1} / ${card.photoPaths.size}",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(
+                        onClick = { fullGalleryVisible = false },
+                        modifier = Modifier.background(Color.White.copy(alpha = 0.2f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun EditCardScreen(
+    initialCard: CardItem?,
+    currentLanguage: AppLanguage,
+    onSave: (CardItem) -> Unit
+) {
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     val presetCategories = remember(currentLanguage) {
         listOf(
@@ -2115,602 +2538,320 @@ fun BatchManagementScreen(
             StringsProvider.get("other", currentLanguage)
         )
     }
+    val presetIntervals = remember { listOf(0, 3, 7, 15, 30) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                String.format(StringsProvider.get("batch_selected_count", currentLanguage), selectedIds.size, cardList.size),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        selectedIds = if (isAllSelected) emptySet() else cardList.map { it.id }.toSet()
-                    },
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(if (isAllSelected) StringsProvider.get("batch_unselect_all", currentLanguage) else StringsProvider.get("batch_select_all", currentLanguage), fontSize = 12.sp)
-                }
+    val presetColors = remember {
+        listOf(
+            "0xFFFFFFFF" to "白",
+            "0xFFE3F2FD" to "蓝",
+            "0xFF1E88E5" to "深蓝",
+            "0xFF26A69A" to "绿",
+            "0xFFFF7043" to "橙"
+        )
+    }
 
-                Button(
-                    onClick = onBack,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    Text(StringsProvider.get("batch_done_back", currentLanguage), fontSize = 12.sp)
-                }
-            }
-        }
+    var title by remember { mutableStateOf(initialCard?.title ?: "") }
+    var cardNumber by remember { mutableStateOf(initialCard?.cardNumber ?: "") }
+    var note by remember { mutableStateOf(initialCard?.note ?: "") }
+    var photoPaths by remember { mutableStateOf(initialCard?.photoPaths ?: emptyList()) }
 
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Button(
-                onClick = { showDeleteConfirm = true },
-                enabled = selectedIds.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(StringsProvider.get("batch_delete_selected", currentLanguage), fontSize = 12.sp)
-            }
+    var selectedCategory by remember { mutableStateOf(initialCard?.category ?: presetCategories[0]) }
+    var isCustomCategory by remember { mutableStateOf(!presetCategories.contains(initialCard?.category ?: presetCategories[0])) }
+    var customCategoryInput by remember { mutableStateOf(if (isCustomCategory) (initialCard?.category ?: "") else "") }
 
-            OutlinedButton(
-                onClick = { showBatchCategoryDialog = true },
-                enabled = selectedIds.isNotEmpty(),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(StringsProvider.get("batch_change_category", currentLanguage), fontSize = 12.sp)
-            }
+    var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
+    var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
 
-            OutlinedButton(
-                onClick = { showBatchExtendDialog = true },
-                enabled = selectedIds.isNotEmpty(),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Icon(Icons.Default.Update, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(StringsProvider.get("batch_extend_date", currentLanguage), fontSize = 12.sp)
-            }
-
-            OutlinedButton(
-                onClick = { showClearAllConfirm = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(StringsProvider.get("batch_clear_all", currentLanguage), fontSize = 12.sp)
-            }
-        }
-
-        HorizontalDivider()
-
-        if (cardList.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(StringsProvider.get("empty_data", currentLanguage), color = Color.Gray)
-            }
-        } else {
-            val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(cardList, key = { it.id }) { card ->
-                    val isChecked = selectedIds.contains(card.id)
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selectedIds = if (isChecked) selectedIds - card.id else selectedIds + card.id
-                            },
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = { checked ->
-                                        selectedIds = if (checked) selectedIds + card.id else selectedIds - card.id
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        SuggestionChip(
-                                            onClick = {},
-                                            label = { Text(card.category, fontSize = 11.sp) }
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(card.title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                    }
-                                    if (card.cardNumber.isNotBlank()) {
-                                        Text(card.cardNumber, fontSize = 12.sp, color = Color.Gray)
-                                    }
-                                }
-                            }
-                            Text("${StringsProvider.get("expire_date", currentLanguage)}: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 12.sp, color = Color.Gray)
-                        }
-                    }
-                }
-            }
+    val calendar = remember {
+        Calendar.getInstance().apply {
+            timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
         }
     }
 
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(StringsProvider.get("batch_delete_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = { Text(String.format(StringsProvider.get("batch_delete_confirm_desc", currentLanguage), selectedIds.size)) },
-            confirmButton = {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    onClick = {
-                        val remaining = cardList.filter { !selectedIds.contains(it.id) }
-                        onUpdateCards(remaining, "批量删除 ${selectedIds.size} 张卡片")
-                        selectedIds = emptySet()
-                        showDeleteConfirm = false
-                    }
-                ) {
-                    Text(StringsProvider.get("confirm", currentLanguage))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
-            }
-        )
+    var selectedYear by remember { mutableIntStateOf(calendar.get(Calendar.YEAR)) }
+    var selectedMonth by remember { mutableIntStateOf(calendar.get(Calendar.MONTH) + 1) }
+    var selectedDay by remember { mutableIntStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
+
+    var selectedInterval by remember { mutableIntStateOf(initialCard?.intervalDays ?: 30) }
+    var isCustomInterval by remember { mutableStateOf(!presetIntervals.contains(initialCard?.intervalDays ?: 30)) }
+    var customIntervalInput by remember { mutableStateOf(if (isCustomInterval) (initialCard?.intervalDays ?: 30).toString() else "") }
+
+    val multiplePhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        val savedList = uris.map { saveImageToInternalStorage(context, it) }
+        photoPaths = photoPaths + savedList
     }
 
-    if (showClearAllConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearAllConfirm = false },
-            title = { Text(StringsProvider.get("batch_clear_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = { Text(StringsProvider.get("batch_clear_confirm_desc", currentLanguage)) },
-            confirmButton = {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    onClick = {
-                        onUpdateCards(emptyList(), "清空全部卡片数据")
-                        selectedIds = emptySet()
-                        showClearAllConfirm = false
-                    }
-                ) {
-                    Text(StringsProvider.get("batch_clear_all", currentLanguage))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearAllConfirm = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
-            }
-        )
-    }
-
-    if (showBatchCategoryDialog) {
-        var targetCat by remember { mutableStateOf(presetCategories[0]) }
-        var isCustomCat by remember { mutableStateOf(false) }
-        var customCatInput by remember { mutableStateOf("") }
-
-        AlertDialog(
-            onDismissRequest = { showBatchCategoryDialog = false },
-            title = { Text(StringsProvider.get("batch_category_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(String.format(StringsProvider.get("batch_category_confirm_desc", currentLanguage), selectedIds.size))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        presetCategories.forEach { cat ->
-                            FilterChip(
-                                selected = !isCustomCat && targetCat == cat,
-                                onClick = {
-                                    isCustomCat = false
-                                    targetCat = cat
-                                },
-                                label = { Text(cat) }
-                            )
-                        }
-                        FilterChip(
-                            selected = isCustomCat,
-                            onClick = { isCustomCat = true },
-                            label = { Text(StringsProvider.get("custom_category", currentLanguage)) }
-                        )
-                    }
-                    if (isCustomCat) {
-                        OutlinedTextField(
-                            value = customCatInput,
-                            onValueChange = { customCatInput = it },
-                            label = { Text(StringsProvider.get("custom_category_hint", currentLanguage)) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val finalCat = if (isCustomCat && customCatInput.isNotBlank()) customCatInput.trim() else targetCat
-                        val updated = cardList.map {
-                            if (selectedIds.contains(it.id)) it.copy(category = finalCat) else it
-                        }
-                        onUpdateCards(updated, "批量修改 ${selectedIds.size} 张卡片分类为 [$finalCat]")
-                        showBatchCategoryDialog = false
-                    }
-                ) {
-                    Text(StringsProvider.get("confirm", currentLanguage))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBatchCategoryDialog = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
-            }
-        )
-    }
-
-    if (showBatchExtendDialog) {
-        AlertDialog(
-            onDismissRequest = { showBatchExtendDialog = false },
-            title = { Text(StringsProvider.get("batch_extend_confirm_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = { Text(String.format(StringsProvider.get("batch_extend_confirm_desc", currentLanguage), selectedIds.size)) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val updated = cardList.map { card ->
-                            if (selectedIds.contains(card.id)) {
-                                val nextCal = Calendar.getInstance().apply {
-                                    timeInMillis = card.expiryDateMillis
-                                    add(Calendar.DAY_OF_MONTH, if (card.intervalDays > 0) card.intervalDays else 30)
-                                }
-                                card.copy(expiryDateMillis = nextCal.timeInMillis)
-                            } else {
-                                card
-                            }
-                        }
-                        onUpdateCards(updated, "批量顺延 ${selectedIds.size} 张卡片到期日")
-                        showBatchExtendDialog = false
-                    }
-                ) {
-                    Text(StringsProvider.get("confirm", currentLanguage))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBatchExtendDialog = false }) { Text(StringsProvider.get("cancel", currentLanguage)) }
-            }
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun ProfileScreen(
-    currentTheme: AppTheme,
-    currentLanguage: AppLanguage,
-    cardCount: Int,
-    onThemeChanged: (AppTheme) -> Unit,
-    onLanguageChanged: (AppLanguage) -> Unit,
-    onBatchManageClick: () -> Unit,
-    onHistoryTimelineClick: () -> Unit,
-    onExportClick: () -> Unit,
-    onExportTemplateClick: () -> Unit,
-    onImportFileParsed: (List<CardItem>) -> Unit,
-    onRestoreClick: () -> Unit
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-    val lastExportTime = remember { CardStorage.getLastExportTime(context) }
-    var biometricEnabled by remember { mutableStateOf(CardStorage.isBiometricEnabled(context)) }
-
-    val importLauncher = rememberLauncherForActivityResult(
+    val bgPhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val parsedCards = ExcelExportImportHelper.parsePackageFromUri(context, it)
-            onImportFileParsed(parsedCards)
+            val savedPath = saveImageToInternalStorage(context, it)
+            bgType = "URI"
+            bgValue = savedPath
         }
     }
 
-    Column(
+    val datePickerDialog = remember {
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                selectedYear = year
+                selectedMonth = month + 1
+                selectedDay = dayOfMonth
+            },
+            selectedYear,
+            selectedMonth - 1,
+            selectedDay
+        )
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    focusManager.clearFocus()
+                })
+            }
     ) {
-        Spacer(modifier = Modifier.height(10.dp))
-        
-        val iconResId = remember(context) {
-            context.resources.getIdentifier("app_icon", "drawable", context.packageName)
-        }
-        if (iconResId != 0) {
-            Image(
-                painter = painterResource(id = iconResId),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(90.dp)
-                    .clip(CircleShape)
-                    .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text(StringsProvider.get("card_name", currentLanguage)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
             )
-        } else {
-            Icon(
-                Icons.Default.AccountCircle,
-                contentDescription = null,
-                modifier = Modifier.size(90.dp),
-                tint = MaterialTheme.colorScheme.primary
+
+            OutlinedTextField(
+                value = cardNumber,
+                onValueChange = { cardNumber = it },
+                label = { Text(StringsProvider.get("card_number", currentLanguage)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
             )
-        }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("贾维斯 V1.0", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text("已安全管理 $cardCount 张卡片", color = Color.Gray, fontSize = 13.sp)
-        }
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onHistoryTimelineClick() }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.History,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(StringsProvider.get("history_timeline", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text(StringsProvider.get("history_desc", currentLanguage), fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
-            }
-        }
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onBatchManageClick() }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Checklist,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(StringsProvider.get("batch_manage", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text(StringsProvider.get("batch_manage_desc", currentLanguage), fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
-            }
-        }
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(StringsProvider.get("biometric_title", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text(StringsProvider.get("biometric_desc", currentLanguage), fontSize = 12.sp, color = Color.Gray)
-                }
-                Switch(
-                    checked = biometricEnabled,
-                    onCheckedChange = {
-                        biometricEnabled = it
-                        CardStorage.setBiometricEnabled(context, it)
-                    }
-                )
-            }
-        }
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(StringsProvider.get("data_backup", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(
-                    if (lastExportTime != null) "上次导出备份时间: $lastExportTime" else "支持与 Excel (.csv) 格式交互，建议定期备份",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = onExportClick,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(StringsProvider.get("export_csv", currentLanguage))
-                    }
-
-                    OutlinedButton(
-                        onClick = { importLauncher.launch("*/*") },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(StringsProvider.get("import_csv", currentLanguage))
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onExportTemplateClick,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(StringsProvider.get("download_template", currentLanguage), fontSize = 12.sp)
-                    }
-
-                    OutlinedButton(
-                        onClick = onRestoreClick,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(StringsProvider.get("restore_backup", currentLanguage), fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(StringsProvider.get("lang_setting", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    AppLanguage.values().forEach { lang ->
-                        FilterChip(
-                            selected = currentLanguage == lang,
-                            onClick = { onLanguageChanged(lang) },
-                            label = { Text(lang.displayName) },
-                            leadingIcon = {
-                                if (currentLanguage == lang) {
-                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(StringsProvider.get("theme_setting", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    AppTheme.values().forEach { theme ->
-                        FilterChip(
-                            selected = currentTheme == theme,
-                            onClick = { onThemeChanged(theme) },
-                            label = { 
-                                Text(StringsProvider.get(theme.key, currentLanguage)) 
-                            },
-                            leadingIcon = {
-                                if (currentTheme == theme) {
-                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                label = { Text(StringsProvider.get("note", currentLanguage)) },
+                minLines = 2,
+                maxLines = 3,
+                modifier = Modifier.fillMaxWidth()
             )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        clipboardManager.setText(AnnotatedString("375860698@qq.com"))
-                        Toast.makeText(context, StringsProvider.get("toast_copied", currentLanguage), Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(16.dp),
+
+            Text(StringsProvider.get("card_photos", currentLanguage), fontSize = 13.sp, color = Color.Gray)
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Outlined.Email,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        StringsProvider.get("feedback_title", currentLanguage),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        StringsProvider.get("feedback_desc", currentLanguage),
-                        fontSize = 12.sp,
-                        color = Color.Gray
+                item {
+                    OutlinedButton(
+                        onClick = { multiplePhotoLauncher.launch("image/*") },
+                        modifier = Modifier.size(72.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Text(StringsProvider.get("add_photo", currentLanguage), fontSize = 10.sp)
+                        }
+                    }
+                }
+                itemsIndexed(photoPaths) { index, path ->
+                    Box(modifier = Modifier.size(72.dp)) {
+                        AsyncImage(
+                            model = path,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        IconButton(
+                            onClick = { photoPaths = photoPaths.filterIndexed { i, _ -> i != index } },
+                            modifier = Modifier
+                                .size(20.dp)
+                                .align(Alignment.TopEnd)
+                                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                        }
+                    }
+                }
+            }
+
+            Text(StringsProvider.get("category", currentLanguage), fontSize = 13.sp, color = Color.Gray)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                presetCategories.forEach { cat ->
+                    FilterChip(
+                        selected = !isCustomCategory && selectedCategory == cat,
+                        onClick = {
+                            isCustomCategory = false
+                            selectedCategory = cat
+                        },
+                        label = { Text(cat) }
                     )
                 }
+                FilterChip(
+                    selected = isCustomCategory,
+                    onClick = { isCustomCategory = true },
+                    label = { Text(StringsProvider.get("custom_category", currentLanguage)) }
+                )
+            }
+
+            if (isCustomCategory) {
+                OutlinedTextField(
+                    value = customCategoryInput,
+                    onValueChange = { customCategoryInput = it },
+                    label = { Text(StringsProvider.get("custom_category_hint", currentLanguage)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Text(StringsProvider.get("custom_bg", currentLanguage), fontSize = 13.sp, color = Color.Gray)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                presetColors.forEach { (hex, _) ->
+                    val colorVal = parseColorHex(hex)
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(colorVal)
+                            .border(
+                                width = if (bgType == "COLOR" && bgValue == hex) 2.dp else 1.dp,
+                                color = if (bgType == "COLOR" && bgValue == hex) MaterialTheme.colorScheme.primary else Color.LightGray,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                bgType = "COLOR"
+                                bgValue = hex
+                            }
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { bgPhotoLauncher.launch("image/*") },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(if (bgType == "URI") StringsProvider.get("photo_selected", currentLanguage) else StringsProvider.get("select_photo", currentLanguage), fontSize = 12.sp)
+                }
+            }
+
+            Text(StringsProvider.get("expire_date_label", currentLanguage), fontSize = 13.sp, color = Color.Gray)
+            OutlinedCard(
+                onClick = { datePickerDialog.show() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${selectedYear} 年 ${selectedMonth} 月 ${selectedDay} 日",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(Icons.Default.CalendarToday, contentDescription = null)
+                }
+            }
+
+            Text(StringsProvider.get("remind_interval_label", currentLanguage), fontSize = 13.sp, color = Color.Gray)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                presetIntervals.forEach { days ->
+                    FilterChip(
+                        selected = !isCustomInterval && selectedInterval == days,
+                        onClick = {
+                            isCustomInterval = false
+                            selectedInterval = days
+                        },
+                        label = { Text(if (days == 0) StringsProvider.get("no_remind", currentLanguage) else "${days}${StringsProvider.get("day", currentLanguage)}") }
+                    )
+                }
+                FilterChip(
+                    selected = isCustomInterval,
+                    onClick = { isCustomInterval = true },
+                    label = { Text(StringsProvider.get("custom_interval", currentLanguage)) }
+                )
+            }
+
+            if (isCustomInterval) {
+                OutlinedTextField(
+                    value = customIntervalInput,
+                    onValueChange = { customIntervalInput = it.filter { char -> char.isDigit() } },
+                    label = { Text(StringsProvider.get("custom_interval_hint", currentLanguage)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Button(
+                onClick = {
+                    if (title.isBlank()) return@Button
+
+                    val saveCalendar = Calendar.getInstance().apply {
+                        set(Calendar.YEAR, selectedYear)
+                        set(Calendar.MONTH, selectedMonth - 1)
+                        set(Calendar.DAY_OF_MONTH, selectedDay)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                    }
+
+                    val finalCategory = if (isCustomCategory && customCategoryInput.isNotBlank()) customCategoryInput.trim() else selectedCategory
+
+                    val finalInterval = if (isCustomInterval) {
+                        customIntervalInput.toIntOrNull() ?: 30
+                    } else {
+                        selectedInterval
+                    }
+
+                    val card = CardItem(
+                        id = initialCard?.id ?: UUID.randomUUID().toString(),
+                        title = title,
+                        cardNumber = cardNumber,
+                        category = finalCategory,
+                        note = note,
+                        expiryDateMillis = saveCalendar.timeInMillis,
+                        intervalDays = finalInterval,
+                        isPinned = initialCard?.isPinned ?: false,
+                        pinTime = initialCard?.pinTime ?: 0L,
+                        bgType = bgType,
+                        bgValue = bgValue,
+                        photoPaths = photoPaths
+                    )
+                    onSave(card)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(StringsProvider.get("save_card", currentLanguage), fontSize = 16.sp)
             }
         }
     }
