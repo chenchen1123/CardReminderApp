@@ -7,6 +7,8 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.hardware.biometrics.BiometricPrompt
 import android.net.Uri
 import android.os.Build
@@ -38,6 +40,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +71,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -75,14 +80,13 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.ByteArrayInputStream
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStreamReader
+import java.io.*
 import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 enum class AppLanguage(val code: String, val displayName: String) {
     ZH_CN("zh_CN", "简体中文"),
@@ -167,15 +171,18 @@ object StringsProvider {
                 "batch_extend_confirm_desc" -> "將根據選中 %d 張卡片各自設定的【提醒/續期間隔天數】，統一向後順延計算新的到期日。"
                 "biometric_title" -> "應用生物識別鎖 (指紋/面容)"
                 "biometric_desc" -> "開啟後啟動應用需進行身分驗證"
-                "data_backup" -> "數據備份與表格導入導出"
-                "export_csv" -> "導出表格"
-                "import_csv" -> "導入表格"
+                "data_backup" -> "數據備份與完整包(含照片)導入導出"
+                "export_csv" -> "導出備份包(含照片)"
+                "import_csv" -> "導入備份包"
                 "download_template" -> "下載導入模板"
                 "restore_backup" -> "恢復上次備份"
                 "theme_setting" -> "軟體外觀主題設置"
                 "lang_setting" -> "軟體語言設置 (Language)"
                 "feedback_title" -> "意見反饋與支援"
                 "feedback_desc" -> "如有任何建議或者bug歡迎發送至 375860698@qq.com"
+                "confirm_edit_title" -> "確認編輯卡片"
+                "confirm_edit_desc" -> "是否進入卡片「%s」的編輯頁面？"
+                "card_detail_readonly" -> "卡片詳情 (唯讀)"
                 "theme_default" -> "預設明亮"
                 "theme_dark" -> "深色夜間"
                 "theme_ocean" -> "靜謐海洋"
@@ -278,15 +285,18 @@ object StringsProvider {
                 "batch_extend_confirm_desc" -> "Extend expiry dates for %d selected cards according to their intervals."
                 "biometric_title" -> "Biometric App Lock (Fingerprint/Face)"
                 "biometric_desc" -> "Require authentication when opening app"
-                "data_backup" -> "Data Backup & CSV Excel"
-                "export_csv" -> "Export CSV"
-                "import_csv" -> "Import CSV"
+                "data_backup" -> "Backup & Restore with Photos (ZIP)"
+                "export_csv" -> "Export Package"
+                "import_csv" -> "Import Package"
                 "download_template" -> "Download Template"
                 "restore_backup" -> "Restore Backup"
                 "theme_setting" -> "App Theme & Appearance"
                 "lang_setting" -> "Language Settings"
                 "feedback_title" -> "Feedback & Support"
                 "feedback_desc" -> "Feel free to send suggestions or bugs to 375860698@qq.com"
+                "confirm_edit_title" -> "Edit Card"
+                "confirm_edit_desc" -> "Do you want to edit card '%s'?"
+                "card_detail_readonly" -> "Card Details (Read-only)"
                 "theme_default" -> "Default Light"
                 "theme_dark" -> "Dark Mode"
                 "theme_ocean" -> "Ocean Blue"
@@ -389,15 +399,18 @@ object StringsProvider {
                 "batch_extend_confirm_desc" -> "選択した%d枚のカードの有効期限を設定間隔に応じて延長します。"
                 "biometric_title" -> "生体認証ロック (指紋・顔認証)"
                 "biometric_desc" -> "起動時に認証を要求します"
-                "data_backup" -> "データバックアップとExcel入出力"
-                "export_csv" -> "CSV出力"
-                "import_csv" -> "CSV読込"
+                "data_backup" -> "データバックアップと写真付き入出力"
+                "export_csv" -> "一括バックアップ出力"
+                "import_csv" -> "バックアップ復元"
                 "download_template" -> "テンプレート取得"
                 "restore_backup" -> "バックアップ復元"
                 "theme_setting" -> "外観テーマ設定"
                 "lang_setting" -> "言語設定 (Language)"
                 "feedback_title" -> "ご意見・お問い合わせ"
                 "feedback_desc" -> "ご提案やバグ報告は 375860698@qq.com までお気軽にどうぞ"
+                "confirm_edit_title" -> "カードを編集"
+                "confirm_edit_desc" -> "カード「%s」の編集画面に移動しますか？"
+                "card_detail_readonly" -> "カード詳細 (閲覧のみ)"
                 "theme_default" -> "デフォルト・ライト"
                 "theme_dark" -> "ダークモード"
                 "theme_ocean" -> "オーシャン・ブルー"
@@ -500,15 +513,18 @@ object StringsProvider {
                 "batch_extend_confirm_desc" -> "Estender as datas de validade de %d cartões de acordo com seus intervalos."
                 "biometric_title" -> "Bloqueio Biométrico (Digital/Face)"
                 "biometric_desc" -> "Exigir autenticação ao abrir o aplicativo"
-                "data_backup" -> "Backup de Dados e CSV Excel"
-                "export_csv" -> "Exportar CSV"
-                "import_csv" -> "Importar CSV"
+                "data_backup" -> "Backup com Fotos (ZIP)"
+                "export_csv" -> "Exportar Pacote"
+                "import_csv" -> "Importar Pacote"
                 "download_template" -> "Baixar Modelo"
                 "restore_backup" -> "Restaurar Backup"
                 "theme_setting" -> "Tema e Aparência"
                 "lang_setting" -> "Configurações de Idioma"
                 "feedback_title" -> "Feedback e Suporte"
                 "feedback_desc" -> "Sugestões ou bugs: 375860698@qq.com"
+                "confirm_edit_title" -> "Editar Cartão"
+                "confirm_edit_desc" -> "Deseja editar o cartão '%s'?"
+                "card_detail_readonly" -> "Detalhes do Cartão (Somente leitura)"
                 "theme_default" -> "Claro Padrão"
                 "theme_dark" -> "Modo Escuro"
                 "theme_ocean" -> "Azul Oceano"
@@ -611,15 +627,18 @@ object StringsProvider {
                 "batch_extend_confirm_desc" -> "将根据选中 %d 张卡片各自设定的【提醒/续期间隔天数】，统一向后顺延计算新的到期日。"
                 "biometric_title" -> "应用生物识别锁 (指纹/面容)"
                 "biometric_desc" -> "开启后启动应用需进行身份验证"
-                "data_backup" -> "数据备份与表格导入导出"
-                "export_csv" -> "导出表格"
-                "import_csv" -> "导入表格"
+                "data_backup" -> "数据备份与完整包(含照片)导入导出"
+                "export_csv" -> "导出备份包(含照片)"
+                "import_csv" -> "导入备份包"
                 "download_template" -> "下载导入模板"
                 "restore_backup" -> "恢复上次备份"
                 "theme_setting" -> "软件外观主题设置"
                 "lang_setting" -> "软件语言设置 (Language)"
                 "feedback_title" -> "意见反馈与支持"
                 "feedback_desc" -> "如有任何建议或者bug欢迎发送至 375860698@qq.com"
+                "confirm_edit_title" -> "确认编辑卡片"
+                "confirm_edit_desc" -> "是否进入卡片「%s」的编辑页面？"
+                "card_detail_readonly" -> "卡片详情 (只读)"
                 "theme_default" -> "默认明亮"
                 "theme_dark" -> "深色夜间"
                 "theme_ocean" -> "静谧海洋"
@@ -878,7 +897,7 @@ object CardStorage {
         return sp.getString(KEY_LAST_EXPORT_TIME, null)
     }
 
-    private fun parseJsonToCards(jsonStr: String): List<CardItem> {
+    fun parseJsonToCards(jsonStr: String): List<CardItem> {
         val list = mutableListOf<CardItem>()
         try {
             val jsonArray = JSONArray(jsonStr)
@@ -971,7 +990,6 @@ object CardStorage {
     }
 }
 
-// 系统通知栏提醒工具
 object NotificationHelper {
     private const val CHANNEL_ID = "card_reminder_channel"
     private const val CHANNEL_NAME = "卡片到期提醒通知"
@@ -1018,43 +1036,76 @@ object NotificationHelper {
     }
 }
 
+// 支持真实图片离线打包的 ZIP 导入导出工具
 object ExcelExportImportHelper {
     private val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-    fun exportToCsv(context: Context, cards: List<CardItem>) {
+    fun exportPackageWithPhotos(context: Context, cards: List<CardItem>) {
         try {
             val exportDir = File(context.filesDir, "exports").apply { mkdirs() }
-            val fileName = "卡片数据备份_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())}.csv"
-            val file = File(exportDir, fileName)
-            val outputStream = FileOutputStream(file)
-            
-            outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
-            val writer = outputStream.bufferedWriter(Charsets.UTF_8)
-            writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
+            val fileName = "卡片完整备份包_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())}.zip"
+            val zipFile = File(exportDir, fileName)
+            val zos = ZipOutputStream(FileOutputStream(zipFile))
+
+            // 1. 写入结构化 JSON
+            val jsonArray = JSONArray()
+            val photosToInclude = mutableSetOf<String>()
 
             cards.forEach { card ->
-                val dateStr = sdf.format(Date(card.expiryDateMillis))
-                val line = "\"${card.title.replace("\"", "\"\"")}\"," +
-                           "\"${card.cardNumber.replace("\"", "\"\"")}\"," +
-                           "\"${card.category.replace("\"", "\"\"")}\"," +
-                           "\"$dateStr\"," +
-                           "${card.intervalDays}," +
-                           "\"${card.note.replace("\"", "\"\"")}\"\n"
-                writer.write(line)
+                val obj = JSONObject().apply {
+                    put("id", card.id)
+                    put("title", card.title)
+                    put("cardNumber", card.cardNumber)
+                    put("category", card.category)
+                    put("note", card.note)
+                    put("expiryDateMillis", card.expiryDateMillis)
+                    put("intervalDays", card.intervalDays)
+                    put("isPinned", card.isPinned)
+                    put("pinTime", card.pinTime)
+                    put("bgType", card.bgType)
+                    put("bgValue", if (card.bgType == "URI") File(card.bgValue).name else card.bgValue)
+
+                    val pNames = JSONArray()
+                    card.photoPaths.forEach { pPath ->
+                        val fName = File(pPath).name
+                        pNames.put(fName)
+                        photosToInclude.add(pPath)
+                    }
+                    put("photoPaths", pNames)
+                }
+                jsonArray.put(obj)
+                if (card.bgType == "URI") {
+                    photosToInclude.add(card.bgValue)
+                }
             }
-            writer.flush()
-            writer.close()
+
+            zos.putNextEntry(ZipEntry("cards_data.json"))
+            zos.write(jsonArray.toString().toByteArray(Charsets.UTF_8))
+            zos.closeEntry()
+
+            // 2. 写入关联的图片文件
+            photosToInclude.forEach { imgPath ->
+                val imgFile = File(imgPath)
+                if (imgFile.exists()) {
+                    zos.putNextEntry(ZipEntry("images/${imgFile.name}"))
+                    FileInputStream(imgFile).use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+            }
+
+            zos.flush()
+            zos.close()
 
             CardStorage.saveLastExportTime(context)
 
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", zipFile)
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/csv"
+                type = "application/zip"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "卡片数据备份")
+                putExtra(Intent.EXTRA_SUBJECT, "卡片完整备份包(含照片)")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(intent, "导出/分享卡片表格"))
+            context.startActivity(Intent.createChooser(intent, "导出/分享备份包(含实物图片)"))
 
         } catch (e: Exception) {
             e.printStackTrace()
@@ -1067,7 +1118,6 @@ object ExcelExportImportHelper {
             val exportDir = File(context.filesDir, "exports").apply { mkdirs() }
             val file = File(exportDir, "卡片导入标准模板.csv")
             val outputStream = FileOutputStream(file)
-            
             outputStream.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
             val writer = outputStream.bufferedWriter(Charsets.UTF_8)
             writer.write("名称,卡号,分类,到期日期,提醒间隔天数,备注\n")
@@ -1090,12 +1140,82 @@ object ExcelExportImportHelper {
         }
     }
 
-    fun parseCsvFromUri(context: Context, uri: Uri): List<CardItem> {
+    fun parsePackageFromUri(context: Context, uri: Uri): List<CardItem> {
+        val result = mutableListOf<CardItem>()
+        try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return emptyList()
+            val zis = ZipInputStream(inputStream)
+            var entry: ZipEntry?
+            var jsonContent: String? = null
+            val extractedFiles = mutableMapOf<String, File>()
+
+            while (zis.nextEntry.also { entry = it } != null) {
+                val name = entry!!.name
+                if (name == "cards_data.json") {
+                    jsonContent = zis.bufferedReader(Charsets.UTF_8).readText()
+                } else if (name.startsWith("images/")) {
+                    val fName = File(name).name
+                    val localFile = File(context.filesDir, fName)
+                    FileOutputStream(localFile).use { zis.copyTo(it) }
+                    extractedFiles[fName] = localFile
+                }
+                zis.closeEntry()
+            }
+            zis.close()
+
+            if (jsonContent != null) {
+                val jsonArray = JSONArray(jsonContent)
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val bgType = obj.optString("bgType", "COLOR")
+                    val bgValRaw = obj.optString("bgValue", "0xFFFFFFFF")
+                    val finalBgValue = if (bgType == "URI") {
+                        extractedFiles[bgValRaw]?.absolutePath ?: File(context.filesDir, bgValRaw).absolutePath
+                    } else bgValRaw
+
+                    val pNames = obj.optJSONArray("photoPaths")
+                    val finalPhotos = mutableListOf<String>()
+                    if (pNames != null) {
+                        for (k in 0 until pNames.length()) {
+                            val fName = pNames.getString(k)
+                            val fPath = extractedFiles[fName]?.absolutePath ?: File(context.filesDir, fName).absolutePath
+                            finalPhotos.add(fPath)
+                        }
+                    }
+
+                    result.add(
+                        CardItem(
+                            id = obj.optString("id", UUID.randomUUID().toString()),
+                            title = obj.optString("title", ""),
+                            cardNumber = obj.optString("cardNumber", ""),
+                            category = obj.optString("category", "其他"),
+                            note = obj.optString("note", ""),
+                            expiryDateMillis = obj.optLong("expiryDateMillis", System.currentTimeMillis()),
+                            intervalDays = obj.optInt("intervalDays", 30),
+                            isPinned = obj.optBoolean("isPinned", false),
+                            pinTime = obj.optLong("pinTime", 0L),
+                            bgType = bgType,
+                            bgValue = finalBgValue,
+                            photoPaths = finalPhotos
+                        )
+                    )
+                }
+            } else {
+                // 兼容纯 CSV 格式导入
+                return parseCsvDirectly(context, uri)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return parseCsvDirectly(context, uri)
+        }
+        return result
+    }
+
+    private fun parseCsvDirectly(context: Context, uri: Uri): List<CardItem> {
         val result = mutableListOf<CardItem>()
         try {
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return emptyList()
-            val charset = detectCharset(bytes)
-            val reader = BufferedReader(InputStreamReader(ByteArrayInputStream(bytes), charset))
+            val reader = BufferedReader(InputStreamReader(ByteArrayInputStream(bytes), Charsets.UTF_8))
             var isFirstLine = true
             var line: String?
 
@@ -1105,14 +1225,14 @@ object ExcelExportImportHelper {
                     isFirstLine = false
                     continue
                 }
-                val tokens = parseCsvLine(cleanLine)
+                val tokens = cleanLine.split(",")
                 if (tokens.isNotEmpty() && tokens[0].isNotBlank()) {
-                    val title = tokens.getOrNull(0) ?: ""
-                    val cardNumber = tokens.getOrNull(1) ?: ""
-                    val category = tokens.getOrNull(2) ?: "其他"
-                    val dateStr = tokens.getOrNull(3) ?: ""
-                    val interval = tokens.getOrNull(4)?.toIntOrNull() ?: 30
-                    val note = tokens.getOrNull(5) ?: ""
+                    val title = tokens.getOrNull(0)?.replace("\"", "") ?: ""
+                    val cardNumber = tokens.getOrNull(1)?.replace("\"", "") ?: ""
+                    val category = tokens.getOrNull(2)?.replace("\"", "") ?: "其他"
+                    val dateStr = tokens.getOrNull(3)?.replace("\"", "") ?: ""
+                    val interval = tokens.getOrNull(4)?.trim()?.toIntOrNull() ?: 30
+                    val note = tokens.getOrNull(5)?.replace("\"", "") ?: ""
 
                     val dateMillis = try {
                         sdf.parse(dateStr)?.time ?: System.currentTimeMillis()
@@ -1138,42 +1258,6 @@ object ExcelExportImportHelper {
         }
         return result
     }
-
-    private fun detectCharset(bytes: ByteArray): Charset {
-        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) {
-            return Charsets.UTF_8
-        }
-        return try {
-            val decoder = Charsets.UTF_8.newDecoder()
-            decoder.decode(java.nio.ByteBuffer.wrap(bytes))
-            Charsets.UTF_8
-        } catch (e: Exception) {
-            try {
-                Charset.forName("GB18030")
-            } catch (ex: Exception) {
-                Charset.forName("GBK")
-            }
-        }
-    }
-
-    private fun parseCsvLine(line: String): List<String> {
-        val list = mutableListOf<String>()
-        var inQuotes = false
-        val sb = StringBuilder()
-        for (i in line.indices) {
-            val c = line[i]
-            if (c == '\"') {
-                inQuotes = !inQuotes
-            } else if (c == ',' && !inQuotes) {
-                list.add(sb.toString().trim())
-                sb.setLength(0)
-            } else {
-                sb.append(c)
-            }
-        }
-        list.add(sb.toString().trim())
-        return list
-    }
 }
 
 enum class SortOrder { NONE, EXPIRY_ASC, EXPIRY_DESC }
@@ -1191,7 +1275,6 @@ class MainActivity : ComponentActivity() {
 
     private fun checkAndRequestPermissions(context: Context) {
         val permissions = mutableListOf<String>()
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -1224,6 +1307,8 @@ fun MainTabContainer() {
     var currentSortOrder by remember { mutableStateOf(SortOrder.NONE) }
     var editingCard by remember { mutableStateOf<CardItem?>(null) }
     var deletingCard by remember { mutableStateOf<CardItem?>(null) }
+    var confirmEditCard by remember { mutableStateOf<CardItem?>(null) } // 滑动编辑二级确认弹窗
+    var readOnlyDetailCard by remember { mutableStateOf<CardItem?>(null) } // 首页点击只读详情
     var pinDialogCard by remember { mutableStateOf<CardItem?>(null) }
     var operateConfirmCard by remember { mutableStateOf<CardItem?>(null) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
@@ -1508,9 +1593,8 @@ fun MainTabContainer() {
                         0 -> CategorizedHomeScreen(
                             cardList = cardList,
                             currentLanguage = currentLanguage,
-                            onEdit = { card ->
-                                editingCard = card
-                                selectedTab = 2
+                            onCardClick = { card ->
+                                readOnlyDetailCard = card
                             }
                         )
                         1 -> ListScreen(
@@ -1530,9 +1614,8 @@ fun MainTabContainer() {
                             onLongClickPin = { card ->
                                 pinDialogCard = card
                             },
-                            onEdit = { card ->
-                                editingCard = card
-                                selectedTab = 2
+                            onRequestEdit = { card ->
+                                confirmEditCard = card
                             },
                             onOperated = { card ->
                                 operateConfirmCard = card
@@ -1579,7 +1662,7 @@ fun MainTabContainer() {
                                 if (cardList.isEmpty()) {
                                     Toast.makeText(context, StringsProvider.get("empty_data", currentLanguage), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    ExcelExportImportHelper.exportToCsv(context, cardList)
+                                    ExcelExportImportHelper.exportPackageWithPhotos(context, cardList)
                                 }
                             },
                             onExportTemplateClick = {
@@ -1600,220 +1683,316 @@ fun MainTabContainer() {
                 }
             }
         }
-    }
 
-    if (importPendingCards != null) {
-        val incomingCards = importPendingCards!!
-        AlertDialog(
-            onDismissRequest = { importPendingCards = null },
-            title = { Text("选择导入模式", fontWeight = FontWeight.Bold) },
-            text = {
-                Text("成功解析出 ${incomingCards.size} 张卡片数据。\n请选择如何更新现有卡片？（系统将自动备份当前数据以便恢复）")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        CardStorage.backupCurrentCards(context, cardList)
-                        val merged = cardList.toMutableList()
-                        incomingCards.forEach { inc ->
-                            val existsIndex = merged.indexOfFirst { it.title == inc.title && it.cardNumber == inc.cardNumber }
-                            if (existsIndex >= 0) {
-                                merged[existsIndex] = inc
-                            } else {
-                                merged.add(inc)
+        // 首页点击弹出的只读卡片详情二级弹窗
+        if (readOnlyDetailCard != null) {
+            val card = readOnlyDetailCard!!
+            val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+            Dialog(onDismissRequest = { readOnlyDetailCard = null }) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(StringsProvider.get("card_detail_readonly", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            SuggestionChip(onClick = {}, label = { Text(card.category) })
+                        }
+                        HorizontalDivider()
+                        Text("名称: ${card.title}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        if (card.cardNumber.isNotBlank()) {
+                            Text("卡号: ${card.cardNumber}", fontSize = 14.sp, color = Color.Gray)
+                        }
+                        Text("到期日期: ${sdf.format(Date(card.expiryDateMillis))}", fontSize = 14.sp)
+                        Text("提醒间隔: ${if (card.intervalDays > 0) "${card.intervalDays} 天" else "不提醒"}", fontSize = 14.sp)
+                        if (card.note.isNotBlank()) {
+                            Text("备注信息: ${card.note}", fontSize = 14.sp)
+                        }
+                        if (card.photoPaths.isNotEmpty()) {
+                            Text("实物照片预览 (${card.photoPaths.size}张):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            val pagerState = rememberPagerState { card.photoPaths.size }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(180.dp)
+                                ) { page ->
+                                    AsyncImage(
+                                        model = card.photoPaths[page],
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(8.dp)),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
+                                Text("${pagerState.currentPage + 1} / ${card.photoPaths.size}", fontSize = 11.sp, color = Color.Gray)
                             }
                         }
-                        cardList = merged
-                        CardStorage.saveCards(context, merged, "合并导入 ${incomingCards.size} 张卡片")
-                        Toast.makeText(context, "合并导入完成！已备份旧数据", Toast.LENGTH_SHORT).show()
-                        importPendingCards = null
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Button(
+                            onClick = { readOnlyDetailCard = null },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(StringsProvider.get("confirm", currentLanguage))
+                        }
                     }
-                ) {
-                    Text("合并追加")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = {
-                        CardStorage.backupCurrentCards(context, cardList)
-                        cardList = incomingCards
-                        CardStorage.saveCards(context, incomingCards, "清空覆盖导入 ${incomingCards.size} 张卡片")
-                        Toast.makeText(context, "已清空并覆盖导入！已备份旧数据", Toast.LENGTH_SHORT).show()
-                        importPendingCards = null
-                    }
-                ) {
-                    Text("清空覆盖")
                 }
             }
-        )
-    }
+        }
 
-    if (showRestoreConfirmDialog) {
-        val (backupCards, backupTime) = CardStorage.getBackupInfo(context)
-        AlertDialog(
-            onDismissRequest = { showRestoreConfirmDialog = false },
-            title = { Text("恢复历史备份数据", fontWeight = FontWeight.Bold) },
-            text = {
-                if (backupCards.isEmpty() || backupTime == null) {
-                    Text("暂无历史导入备份记录。")
-                } else {
-                    Text("找到于【$backupTime】自动保存的备份，包含 ${backupCards.size} 张卡片。\n确定要回滚恢复吗？当前数据将被替换。")
-                }
-            },
-            confirmButton = {
-                if (backupCards.isNotEmpty()) {
+        // 滑动编辑确认弹窗
+        if (confirmEditCard != null) {
+            val card = confirmEditCard!!
+            AlertDialog(
+                onDismissRequest = { confirmEditCard = null },
+                title = { Text(StringsProvider.get("confirm_edit_title", currentLanguage), fontWeight = FontWeight.Bold) },
+                text = { Text(String.format(StringsProvider.get("confirm_edit_desc", currentLanguage), card.title)) },
+                confirmButton = {
                     Button(
                         onClick = {
-                            cardList = backupCards
-                            CardStorage.saveCards(context, backupCards, "从上次备份回滚数据")
-                            Toast.makeText(context, StringsProvider.get("toast_restored", currentLanguage), Toast.LENGTH_SHORT).show()
-                            showRestoreConfirmDialog = false
+                            editingCard = card
+                            confirmEditCard = null
+                            selectedTab = 2
                         }
                     ) {
                         Text(StringsProvider.get("confirm", currentLanguage))
                     }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmEditCard = null }) {
+                        Text(StringsProvider.get("cancel", currentLanguage))
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRestoreConfirmDialog = false }) {
-                    Text(StringsProvider.get("cancel", currentLanguage))
-                }
-            }
-        )
-    }
-
-    if (operateConfirmCard != null) {
-        val card = operateConfirmCard!!
-        val interval = card.intervalDays
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-        val nextCalendarByExpiry = Calendar.getInstance().apply {
-            timeInMillis = card.expiryDateMillis
-            add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
+            )
         }
-        val nextExpiryDateStr = sdf.format(nextCalendarByExpiry.time)
 
-        val nextCalendarByToday = Calendar.getInstance().apply {
-            timeInMillis = System.currentTimeMillis()
-            add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
-        }
-        val nextTodayDateStr = sdf.format(nextCalendarByToday.time)
-
-        AlertDialog(
-            onDismissRequest = { operateConfirmCard = null },
-            title = { Text(StringsProvider.get("confirm_update_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(String.format(StringsProvider.get("confirm_update_desc_header", currentLanguage), card.title, interval), fontSize = 13.sp)
-
+        if (importPendingCards != null) {
+            val incomingCards = importPendingCards!!
+            AlertDialog(
+                onDismissRequest = { importPendingCards = null },
+                title = { Text("选择导入模式", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text("成功解析出 ${incomingCards.size} 张卡片数据。\n请选择如何更新现有卡片？（系统将自动备份当前数据以便恢复）")
+                },
+                confirmButton = {
                     Button(
-                        modifier = Modifier.fillMaxWidth(),
                         onClick = {
-                            val actionDesc = "基于原到期日顺延 [${card.title}] 至 $nextExpiryDateStr"
-                            val updatedList = cardList.map { item ->
-                                if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByExpiry.timeInMillis) else item
+                            CardStorage.backupCurrentCards(context, cardList)
+                            val merged = cardList.toMutableList()
+                            incomingCards.forEach { inc ->
+                                val existsIndex = merged.indexOfFirst { it.title == inc.title && it.cardNumber == inc.cardNumber }
+                                if (existsIndex >= 0) {
+                                    merged[existsIndex] = inc
+                                } else {
+                                    merged.add(inc)
+                                }
                             }
-                            cardList = updatedList
-                            CardStorage.saveCards(context, updatedList, actionDesc)
-                            Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextExpiryDateStr), Toast.LENGTH_SHORT).show()
-                            operateConfirmCard = null
+                            cardList = merged
+                            CardStorage.saveCards(context, merged, "合并导入 ${incomingCards.size} 张卡片")
+                            Toast.makeText(context, "合并导入完成！已备份旧数据", Toast.LENGTH_SHORT).show()
+                            importPendingCards = null
                         }
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(StringsProvider.get("btn_update_by_expiry", currentLanguage), fontWeight = FontWeight.Bold)
-                            Text("($nextExpiryDateStr)", fontSize = 12.sp)
-                        }
+                        Text("合并追加")
                     }
-
-                    FilledTonalButton(
-                        modifier = Modifier.fillMaxWidth(),
+                },
+                dismissButton = {
+                    OutlinedButton(
                         onClick = {
-                            val actionDesc = "基于今天顺延 [${card.title}] 至 $nextTodayDateStr"
-                            val updatedList = cardList.map { item ->
-                                if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByToday.timeInMillis) else item
-                            }
-                            cardList = updatedList
-                            CardStorage.saveCards(context, updatedList, actionDesc)
-                            Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextTodayDateStr), Toast.LENGTH_SHORT).show()
-                            operateConfirmCard = null
+                            CardStorage.backupCurrentCards(context, cardList)
+                            cardList = incomingCards
+                            CardStorage.saveCards(context, incomingCards, "清空覆盖导入 ${incomingCards.size} 张卡片")
+                            Toast.makeText(context, "已清空并覆盖导入！已备份旧数据", Toast.LENGTH_SHORT).show()
+                            importPendingCards = null
                         }
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(StringsProvider.get("btn_update_by_today", currentLanguage), fontWeight = FontWeight.Bold)
-                            Text("($nextTodayDateStr)", fontSize = 12.sp)
-                        }
+                        Text("清空覆盖")
                     }
                 }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { operateConfirmCard = null }) {
-                    Text(StringsProvider.get("cancel", currentLanguage))
-                }
-            }
-        )
-    }
+            )
+        }
 
-    if (pinDialogCard != null) {
-        val isPinned = pinDialogCard?.isPinned == true
-        val pinActionText = if (!isPinned) StringsProvider.get("pin_action", currentLanguage) else StringsProvider.get("unpin_action", currentLanguage)
-
-        AlertDialog(
-            onDismissRequest = { pinDialogCard = null },
-            title = { Text(StringsProvider.get("pin_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = { Text(String.format(StringsProvider.get("pin_desc", currentLanguage), pinDialogCard?.title, pinActionText)) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        pinDialogCard?.let { card ->
-                            val actionDesc = if (!isPinned) "置顶卡片 [${card.title}]" else "取消置顶 [${card.title}]"
-                            val newList = cardList.map {
-                                if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
+        if (showRestoreConfirmDialog) {
+            val (backupCards, backupTime) = CardStorage.getBackupInfo(context)
+            AlertDialog(
+                onDismissRequest = { showRestoreConfirmDialog = false },
+                title = { Text("恢复历史备份数据", fontWeight = FontWeight.Bold) },
+                text = {
+                    if (backupCards.isEmpty() || backupTime == null) {
+                        Text("暂无历史导入备份记录。")
+                    } else {
+                        Text("找到于【$backupTime】自动保存的备份，包含 ${backupCards.size} 张卡片。\n确定要回滚恢复吗？当前数据将被替换。")
+                    }
+                },
+                confirmButton = {
+                    if (backupCards.isNotEmpty()) {
+                        Button(
+                            onClick = {
+                                cardList = backupCards
+                                CardStorage.saveCards(context, backupCards, "从上次备份回滚数据")
+                                Toast.makeText(context, StringsProvider.get("toast_restored", currentLanguage), Toast.LENGTH_SHORT).show()
+                                showRestoreConfirmDialog = false
                             }
-                            cardList = newList
-                            CardStorage.saveCards(context, newList, actionDesc)
+                        ) {
+                            Text(StringsProvider.get("confirm", currentLanguage))
                         }
-                        pinDialogCard = null
                     }
-                ) {
-                    Text(pinActionText)
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRestoreConfirmDialog = false }) {
+                        Text(StringsProvider.get("cancel", currentLanguage))
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { pinDialogCard = null }) {
-                    Text(StringsProvider.get("cancel", currentLanguage))
-                }
-            }
-        )
-    }
+            )
+        }
 
-    if (deletingCard != null) {
-        AlertDialog(
-            onDismissRequest = { deletingCard = null },
-            title = { Text(StringsProvider.get("delete_title", currentLanguage), fontWeight = FontWeight.Bold) },
-            text = { Text(String.format(StringsProvider.get("delete_desc", currentLanguage), deletingCard?.title)) },
-            confirmButton = {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    onClick = {
-                        deletingCard?.let { card ->
-                            val newList = cardList.filter { it.id != card.id }
-                            cardList = newList
-                            CardStorage.saveCards(context, newList, "删除卡片 [${card.title}]")
-                            Toast.makeText(context, StringsProvider.get("toast_deleted", currentLanguage), Toast.LENGTH_SHORT).show()
-                        }
-                        deletingCard = null
-                    }
-                ) {
-                    Text(StringsProvider.get("confirm", currentLanguage))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deletingCard = null }) {
-                    Text(StringsProvider.get("cancel", currentLanguage))
-                }
+        if (operateConfirmCard != null) {
+            val card = operateConfirmCard!!
+            val interval = card.intervalDays
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+            val nextCalendarByExpiry = Calendar.getInstance().apply {
+                timeInMillis = card.expiryDateMillis
+                add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
             }
-        )
+            val nextExpiryDateStr = sdf.format(nextCalendarByExpiry.time)
+
+            val nextCalendarByToday = Calendar.getInstance().apply {
+                timeInMillis = System.currentTimeMillis()
+                add(Calendar.DAY_OF_MONTH, if (interval > 0) interval else 30)
+            }
+            val nextTodayDateStr = sdf.format(nextCalendarByToday.time)
+
+            AlertDialog(
+                onDismissRequest = { operateConfirmCard = null },
+                title = { Text(StringsProvider.get("confirm_update_title", currentLanguage), fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(String.format(StringsProvider.get("confirm_update_desc_header", currentLanguage), card.title, interval), fontSize = 13.sp)
+
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val actionDesc = "基于原到期日顺延 [${card.title}] 至 $nextExpiryDateStr"
+                                val updatedList = cardList.map { item ->
+                                    if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByExpiry.timeInMillis) else item
+                                }
+                                cardList = updatedList
+                                CardStorage.saveCards(context, updatedList, actionDesc)
+                                Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextExpiryDateStr), Toast.LENGTH_SHORT).show()
+                                operateConfirmCard = null
+                            }
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(StringsProvider.get("btn_update_by_expiry", currentLanguage), fontWeight = FontWeight.Bold)
+                                Text("($nextExpiryDateStr)", fontSize = 12.sp)
+                            }
+                        }
+
+                        FilledTonalButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val actionDesc = "基于今天顺延 [${card.title}] 至 $nextTodayDateStr"
+                                val updatedList = cardList.map { item ->
+                                    if (item.id == card.id) item.copy(expiryDateMillis = nextCalendarByToday.timeInMillis) else item
+                                }
+                                cardList = updatedList
+                                CardStorage.saveCards(context, updatedList, actionDesc)
+                                Toast.makeText(context, String.format(StringsProvider.get("toast_updated", currentLanguage), nextTodayDateStr), Toast.LENGTH_SHORT).show()
+                                operateConfirmCard = null
+                            }
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(StringsProvider.get("btn_update_by_today", currentLanguage), fontWeight = FontWeight.Bold)
+                                Text("($nextTodayDateStr)", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { operateConfirmCard = null }) {
+                        Text(StringsProvider.get("cancel", currentLanguage))
+                    }
+                }
+            )
+        }
+
+        if (pinDialogCard != null) {
+            val isPinned = pinDialogCard?.isPinned == true
+            val pinActionText = if (!isPinned) StringsProvider.get("pin_action", currentLanguage) else StringsProvider.get("unpin_action", currentLanguage)
+
+            AlertDialog(
+                onDismissRequest = { pinDialogCard = null },
+                title = { Text(StringsProvider.get("pin_title", currentLanguage), fontWeight = FontWeight.Bold) },
+                text = { Text(String.format(StringsProvider.get("pin_desc", currentLanguage), pinDialogCard?.title, pinActionText)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            pinDialogCard?.let { card ->
+                                val actionDesc = if (!isPinned) "置顶卡片 [${card.title}]" else "取消置顶 [${card.title}]"
+                                val newList = cardList.map {
+                                    if (it.id == card.id) it.copy(isPinned = !it.isPinned, pinTime = System.currentTimeMillis()) else it
+                                }
+                                cardList = newList
+                                CardStorage.saveCards(context, newList, actionDesc)
+                            }
+                            pinDialogCard = null
+                        }
+                    ) {
+                        Text(pinActionText)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pinDialogCard = null }) {
+                        Text(StringsProvider.get("cancel", currentLanguage))
+                    }
+                }
+            )
+        }
+
+        if (deletingCard != null) {
+            AlertDialog(
+                onDismissRequest = { deletingCard = null },
+                title = { Text(StringsProvider.get("delete_title", currentLanguage), fontWeight = FontWeight.Bold) },
+                text = { Text(String.format(StringsProvider.get("delete_desc", currentLanguage), deletingCard?.title)) },
+                confirmButton = {
+                    Button(
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        onClick = {
+                            deletingCard?.let { card ->
+                                val newList = cardList.filter { it.id != card.id }
+                                cardList = newList
+                                CardStorage.saveCards(context, newList, "删除卡片 [${card.title}]")
+                                Toast.makeText(context, StringsProvider.get("toast_deleted", currentLanguage), Toast.LENGTH_SHORT).show()
+                            }
+                            deletingCard = null
+                        }
+                    ) {
+                        Text(StringsProvider.get("confirm", currentLanguage))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deletingCard = null }) {
+                        Text(StringsProvider.get("cancel", currentLanguage))
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -1821,7 +2000,7 @@ fun MainTabContainer() {
 fun CategorizedHomeScreen(
     cardList: List<CardItem>,
     currentLanguage: AppLanguage,
-    onEdit: (CardItem) -> Unit
+    onCardClick: (CardItem) -> Unit
 ) {
     val defaultCategories = listOf(
         StringsProvider.get("bank_card", currentLanguage),
@@ -1845,7 +2024,8 @@ fun CategorizedHomeScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             items(categories) { category ->
-                val categoryCards = cardList.filter { it.category == category }
+                // 首页分类内卡片强制按到期日期由近到远（升序）排列
+                val categoryCards = cardList.filter { it.category == category }.sortedBy { it.expiryDateMillis }
                 if (categoryCards.isNotEmpty()) {
                     val urgentCount = categoryCards.count {
                         val diffDays = (it.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
@@ -1876,7 +2056,7 @@ fun CategorizedHomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(categoryCards) { card ->
-                                HorizontalCardItem(card = card, currentLanguage = currentLanguage, onClick = { onEdit(card) })
+                                HorizontalCardItem(card = card, currentLanguage = currentLanguage, onClick = { onCardClick(card) })
                             }
                         }
                     }
@@ -1983,7 +2163,7 @@ fun ListScreen(
     onSearchQueryChange: (String) -> Unit,
     onTogglePin: (CardItem) -> Unit,
     onLongClickPin: (CardItem) -> Unit,
-    onEdit: (CardItem) -> Unit,
+    onRequestEdit: (CardItem) -> Unit,
     onOperated: (CardItem) -> Unit,
     onDeleteRequest: (CardItem) -> Unit
 ) {
@@ -2031,7 +2211,7 @@ fun ListScreen(
                             currentLanguage = currentLanguage,
                             onTogglePin = { onTogglePin(card) },
                             onLongClickPin = { onLongClickPin(card) },
-                            onEdit = { onEdit(card) },
+                            onRequestEdit = { onRequestEdit(card) },
                             onOperated = { onOperated(card) },
                             onDelete = { onDeleteRequest(card) }
                         )
@@ -2072,7 +2252,7 @@ fun SwipeableCardItem(
     currentLanguage: AppLanguage,
     onTogglePin: () -> Unit,
     onLongClickPin: () -> Unit,
-    onEdit: () -> Unit,
+    onRequestEdit: () -> Unit,
     onOperated: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -2080,18 +2260,16 @@ fun SwipeableCardItem(
     val clipboardManager = LocalClipboardManager.current
     var expandedNote by remember { mutableStateOf(false) }
     var isMasked by remember { mutableStateOf(true) }
-    var previewPhotoPath by remember { mutableStateOf<String?>(null) }
+    var fullGalleryVisible by remember { mutableStateOf(false) } // 实物大图左右滑动画廊弹窗
+    var initialPhotoIndex by remember { mutableIntStateOf(0) }
 
     val now = System.currentTimeMillis()
     val diffDays = (card.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
 
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.StartToEnd) {
-                onEdit()
-                false
-            } else if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
+            if (value == SwipeToDismissBoxValue.StartToEnd || value == SwipeToDismissBoxValue.EndToStart) {
+                onRequestEdit()
                 false
             } else false
         }
@@ -2100,23 +2278,14 @@ fun SwipeableCardItem(
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = {
-            val color = when (dismissState.dismissDirection) {
-                SwipeToDismissBoxValue.StartToEnd -> Color(0xFF4CAF50)
-                SwipeToDismissBoxValue.EndToStart -> Color(0xFFE53935)
-                else -> Color.Transparent
-            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(color, shape = RoundedCornerShape(12.dp))
+                    .background(Color(0xFF1E88E5), shape = RoundedCornerShape(12.dp))
                     .padding(horizontal = 20.dp),
                 contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
             ) {
-                if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
-                    Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White)
-                } else if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                    Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White)
-                }
+                Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White)
             }
         }
     ) {
@@ -2246,16 +2415,19 @@ fun SwipeableCardItem(
                                         Text("备注: ${card.note}", fontSize = 13.sp, color = if (isDarkBg) Color.White else Color.Black)
                                     }
                                     if (card.photoPaths.isNotEmpty()) {
-                                        Text("📷 卡片实物照片 (${card.photoPaths.size}张):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        Text("📷 卡片实物照片 (${card.photoPaths.size}张, 点击画廊滑动浏览):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            items(card.photoPaths) { path ->
+                                            itemsIndexed(card.photoPaths) { idx, path ->
                                                 AsyncImage(
                                                     model = path,
                                                     contentDescription = null,
                                                     modifier = Modifier
                                                         .size(72.dp)
                                                         .clip(RoundedCornerShape(8.dp))
-                                                        .clickable { previewPhotoPath = path },
+                                                        .clickable {
+                                                            initialPhotoIndex = idx
+                                                            fullGalleryVisible = true
+                                                        },
                                                     contentScale = ContentScale.Crop
                                                 )
                                             }
@@ -2304,26 +2476,53 @@ fun SwipeableCardItem(
         }
     }
 
-    if (previewPhotoPath != null) {
-        Dialog(onDismissRequest = { previewPhotoPath = null }) {
-            Surface(
+    // 左右滑动切换大图的画廊弹窗
+    if (fullGalleryVisible && card.photoPaths.isNotEmpty()) {
+        Dialog(
+            onDismissRequest = { fullGalleryVisible = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            val pagerState = rememberPagerState(initialPage = initialPhotoIndex) { card.photoPaths.size }
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(12.dp)
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f))
             ) {
-                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    AsyncImage(
-                        model = previewPhotoPath,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp),
-                        contentScale = ContentScale.Fit
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        AsyncImage(
+                            model = card.photoPaths[page],
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+
+                // 顶部状态栏与关闭按钮
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp, start = 20.dp, end = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${pagerState.currentPage + 1} / ${card.photoPaths.size}",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = { previewPhotoPath = null }) {
-                        Text(StringsProvider.get("cancel", currentLanguage))
+                    IconButton(
+                        onClick = { fullGalleryVisible = false },
+                        modifier = Modifier.background(Color.White.copy(alpha = 0.2f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
                     }
                 }
             }
@@ -2388,7 +2587,6 @@ fun EditCardScreen(
     var isCustomInterval by remember { mutableStateOf(!presetIntervals.contains(initialCard?.intervalDays ?: 30)) }
     var customIntervalInput by remember { mutableStateOf(if (isCustomInterval) (initialCard?.intervalDays ?: 30).toString() else "") }
 
-    // 选择多张实物照片 Launcher
     val multiplePhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
@@ -2396,7 +2594,6 @@ fun EditCardScreen(
         photoPaths = photoPaths + savedList
     }
 
-    // 选择背景图 Launcher
     val bgPhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -2462,7 +2659,6 @@ fun EditCardScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // 卡片实物照片管理
             Text(StringsProvider.get("card_photos", currentLanguage), fontSize = 13.sp, color = Color.Gray)
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -3101,7 +3297,7 @@ fun ProfileScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val parsedCards = ExcelExportImportHelper.parseCsvFromUri(context, it)
+            val parsedCards = ExcelExportImportHelper.parsePackageFromUri(context, it)
             onImportFileParsed(parsedCards)
         }
     }
