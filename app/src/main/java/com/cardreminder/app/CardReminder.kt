@@ -10,10 +10,10 @@ class CardReminder : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        initNotificationChannel()
+        createNotificationChannel()
     }
 
-    private fun initNotificationChannel() {
+    private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 val channelId = "card_reminder_channel"
