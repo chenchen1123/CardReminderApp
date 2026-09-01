@@ -23,10 +23,7 @@ fun BatchManagementScreen(
                 title = { Text("批量管理") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "返回"
-                        )
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -39,10 +36,7 @@ fun BatchManagementScreen(
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "卡片批量操作与分类管理（功能开发中）",
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Text(text = "卡片批量管理页面", style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
