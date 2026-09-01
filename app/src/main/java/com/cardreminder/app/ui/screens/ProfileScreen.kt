@@ -3,8 +3,6 @@ package com.cardreminder.app.ui.screens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,9 +18,7 @@ fun ProfileScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("个人中心 / 设置") }
-            )
+            TopAppBar(title = { Text("个人中心 / 设置") })
         }
     ) { innerPadding ->
         Box(
@@ -32,10 +28,7 @@ fun ProfileScreen(
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "个人数据备份与偏好设置（功能开发中）",
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Text(text = "个人配置与数据管理", style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
