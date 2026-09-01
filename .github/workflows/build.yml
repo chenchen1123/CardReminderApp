@@ -19,15 +19,23 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v3
 
-    - name: Build Debug APK with Gradle
+    - name: Generate Gradle Wrapper if missing
+      run: |
+        if [ ! -f "gradlew" ]; then
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+        else
+          chmod +x gradlew
+        fi
+
+    - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace
 
-    - name: Upload APK
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: CardReminderApp-Debug
