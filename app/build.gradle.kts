@@ -23,10 +23,15 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // 解决未配置自定义证书时 Release 包无法安装的问题
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -61,11 +66,11 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     
-    // Compose 扩展图标与导航库
+    // 图标与导航
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // POI 用于 Excel 导入导出
+    // POI 用于 Excel 操作
     implementation("org.apache.poi:poi:5.2.3")
     implementation("org.apache.poi:poi-ooxml:5.2.3")
 
