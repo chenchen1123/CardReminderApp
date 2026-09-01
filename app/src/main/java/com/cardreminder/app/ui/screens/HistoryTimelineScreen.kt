@@ -23,10 +23,7 @@ fun HistoryTimelineScreen(
                 title = { Text("历史时间轴") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "返回"
-                        )
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -39,10 +36,7 @@ fun HistoryTimelineScreen(
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "历史时间轴与动态记录（功能开发中）",
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Text(text = "历史时间轴页面", style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
