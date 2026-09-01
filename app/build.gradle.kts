@@ -65,7 +65,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     
-    // Compose 核心
+    // Compose 基础套件
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -75,6 +75,9 @@ dependencies {
     // 扩展图标库与 Navigation 导航
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+
+    // Coil 图片异步加载（解决 AsyncImage 编译报错）
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     // POI 用于 Excel 导入导出
     implementation("org.apache.poi:poi:5.2.3")
