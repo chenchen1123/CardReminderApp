@@ -20,14 +20,6 @@ android {
         }
     }
 
-    signingConfigs {
-        getByName("debug") {
-            // 强制启用 V1 和 V2 完整签名
-            v1SigningEnabled = true
-            v2SigningEnabled = true
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -84,7 +76,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // POI 用于 Excel 读写
+    // POI 用于 Excel 操作
     implementation("org.apache.poi:poi:5.2.3")
     implementation("org.apache.poi:poi-ooxml:5.2.3")
 
