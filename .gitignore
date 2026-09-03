@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+/build
+/app/build
+/capture
+.DS_Store
+build/
+.cxx/
+.externalNativeBuild
+.navigation/
+captures/
+*.ap_
+*.apk
+*.aab
+CardReminderApp-main/
