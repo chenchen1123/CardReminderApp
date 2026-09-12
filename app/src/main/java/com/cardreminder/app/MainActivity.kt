@@ -69,7 +69,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -1140,18 +1145,111 @@ object SecurityEncryptionHelper {
 }
 
 object OcrCardRecognizer {
-    fun extractCardNumberFromText(text: String): String? {
-        val regex = Regex("\\b(?:\\d[ -]*?){13,19}\\b")
-        val match = regex.find(text)
-        return match?.value?.replace(" ", "")?.replace("-", "")
+    /**
+     * 从识别到的文本中提取可能性最高的卡号
+     * 支持 8 - 20 位纯数字/含空格/横杠分隔的银行卡、电话卡、会员卡号等
+     */
+    fun extractCardNumberFromText(rawText: String): String? {
+        if (rawText.isBlank()) return null
+
+        val candidates = mutableListOf<String>()
+
+        // 1. 逐行及特征修正（常见 OCR 字符混淆识别修正）
+        val lines = rawText.lines()
+
+        // 匹配包含数字、空格、横线、点的连续序列（8-20位数字）
+        val patternSpaced = Regex("(?:\\d[ -.]*){8,20}")
+
+        for (line in lines) {
+            // 对每行修复常见字符混淆（在数字上下文周围）
+            val cleanedLine = line
+                .replace(Regex("(?<=\\d)[Oo](?=\\d)"), "0")
+                .replace(Regex("(?<=\\d)[Ii|l](?=\\d)"), "1")
+                .replace(Regex("(?<=\\d)[Ss](?=\\d)"), "5")
+                .replace(Regex("(?<=\\d)[Bb](?=\\d)"), "8")
+
+            val matches = patternSpaced.findAll(cleanedLine)
+            for (m in matches) {
+                val digits = m.value.replace(Regex("[^0-9]"), "")
+                if (digits.length in 8..20) {
+                    candidates.add(digits)
+                }
+            }
+        }
+
+        // 2. 跨行数字合并（处理 4 个一组换行排版的卡号）
+        val shortGroupDigits = lines
+            .map { it.replace(Regex("[^0-9]"), "") }
+            .filter { it.length in 4..6 }
+            .joinToString("")
+
+        if (shortGroupDigits.length in 13..19) {
+            candidates.add(shortGroupDigits)
+        }
+
+        // 3. 兜底策略：全局提取所有连续 8-20 位纯数字
+        val pureDigitsRegex = Regex("\\d{8,20}")
+        val globalDigits = pureDigitsRegex.findAll(rawText.replace(Regex("[^0-9]"), ""))
+        for (m in globalDigits) {
+            candidates.add(m.value)
+        }
+
+        if (candidates.isEmpty()) return null
+
+        // 4. 候选排序策略：
+        // a. 符合 Luhn 模 10 校验算法（标准银行卡）优先
+        // b. 长度在 13~19 位（标准银行卡长度）优先
+        // c. 长度更长优先
+        return candidates.distinct()
+            .sortedWith(
+                compareByDescending<String> { isLuhnValid(it) }
+                    .thenByDescending { it.length in 13..19 }
+                    .thenByDescending { it.length }
+            ).firstOrNull()
     }
 
-    fun extractFromUri(context: Context, uri: Uri): String? {
-        return try {
-            val name = uri.lastPathSegment ?: ""
-            extractCardNumberFromText(name)
+    /**
+     * 校验 Luhn 模 10 算法（银行卡卡号校验算法）
+     */
+    private fun isLuhnValid(number: String): Boolean {
+        if (number.length !in 13..19) return false
+        var sum = 0
+        var alternate = false
+        for (i in number.length - 1 downTo 0) {
+            var n = number[i] - '0'
+            if (alternate) {
+                n *= 2
+                if (n > 9) n = (n % 10) + 1
+            }
+            sum += n
+            alternate = !alternate
+        }
+        return (sum % 10 == 0)
+    }
+
+    /**
+     * 使用 Google ML Kit 离线 OCR 识别图片 URI 中的卡号
+     */
+    suspend fun extractFromUri(context: Context, uri: Uri): String? = suspendCancellableCoroutine { continuation ->
+        try {
+            val image = InputImage.fromFilePath(context, uri)
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    val result = extractCardNumberFromText(visionText.text)
+                    if (continuation.isActive) {
+                        continuation.resume(result)
+                    }
+                }
+                .addOnFailureListener {
+                    if (continuation.isActive) {
+                        continuation.resume(null)
+                    }
+                }
         } catch (_: Exception) {
-            null
+            if (continuation.isActive) {
+                continuation.resume(null)
+            }
         }
     }
 }
@@ -3182,6 +3280,9 @@ fun EditCardScreen(
         }
     }
 
+    val coroutineScope = rememberCoroutineScope()
+    var isOcrProcessing by remember { mutableStateOf(false) }
+
     val multiPhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
@@ -3195,12 +3296,17 @@ fun EditCardScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val extracted = OcrCardRecognizer.extractFromUri(context, it)
-            if (!extracted.isNullOrBlank()) {
-                cardNumber = extracted
-                Toast.makeText(context, "已智能提取卡号: $extracted", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "未能检测到有效卡号，请手动输入", Toast.LENGTH_SHORT).show()
+            isOcrProcessing = true
+            Toast.makeText(context, "正在识别卡号，请稍候...", Toast.LENGTH_SHORT).show()
+            coroutineScope.launch {
+                val extracted = OcrCardRecognizer.extractFromUri(context, it)
+                isOcrProcessing = false
+                if (!extracted.isNullOrBlank()) {
+                    cardNumber = extracted
+                    Toast.makeText(context, "已智能提取卡号: $extracted", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "未能检测到有效卡号，请手动输入", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -3256,8 +3362,22 @@ fun EditCardScreen(
                 onValueChange = { cardNumber = it },
                 label = { Text(StringsProvider.get("card_number", currentLanguage)) },
                 trailingIcon = {
-                    IconButton(onClick = { ocrPhotoLauncher.launch("image/*") }) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "OCR卡号识别", tint = MaterialTheme.colorScheme.primary)
+                    IconButton(
+                        onClick = {
+                            if (!isOcrProcessing) {
+                                ocrPhotoLauncher.launch("image/*")
+                            }
+                        }
+                    ) {
+                        if (isOcrProcessing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(Icons.Default.CameraAlt, contentDescription = "OCR卡号识别", tint = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 },
                 singleLine = true,

@@ -11,8 +11,8 @@ android {
         applicationId = "com.cardreminder.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "V1.0"
+        versionCode = 2
+        versionName = "V1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,10 +22,16 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            // 默认标准调试签名
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
         create("release") {
-            initWith(getByName("debug"))
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
     }
 
@@ -78,4 +84,7 @@ dependencies {
 
     // Coil 图片加载库
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Google ML Kit 离线文本识别 (OCR 卡号识别)
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }
