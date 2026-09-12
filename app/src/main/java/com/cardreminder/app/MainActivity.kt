@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -710,10 +711,11 @@ object CardStorage {
 
         val jsonArray = JSONArray()
         cards.forEach { card ->
+            NotificationScheduler.scheduleCardReminders(context, card.title, card.id, card.expiryDateMillis)
             val obj = JSONObject().apply {
                 put("id", card.id)
                 put("title", card.title)
-                put("cardNumber", card.cardNumber)
+                put("cardNumber", SecurityEncryptionHelper.encrypt(card.cardNumber))
                 put("category", card.category)
                 put("note", card.note)
                 put("expiryDateMillis", card.expiryDateMillis)
@@ -867,11 +869,12 @@ object CardStorage {
                         imagePaths.add(imgArr.getString(j))
                     }
                 }
+                val rawCardNum = obj.optString("cardNumber", "")
                 list.add(
                     CardItem(
                         id = obj.optString("id", UUID.randomUUID().toString()),
                         title = obj.optString("title", ""),
-                        cardNumber = obj.optString("cardNumber", ""),
+                        cardNumber = SecurityEncryptionHelper.decrypt(rawCardNum),
                         category = obj.optString("category", "其他"),
                         note = obj.optString("note", ""),
                         expiryDateMillis = obj.optLong("expiryDateMillis", System.currentTimeMillis()),
@@ -1103,6 +1106,164 @@ object ExcelExportImportHelper {
         list.add(sb.toString().trim())
         return list
     }
+}
+
+object SecurityEncryptionHelper {
+    private const val SECRET_KEY = "JarvisCardReminderKey2026"
+
+    fun encrypt(plainText: String): String {
+        if (plainText.isBlank()) return plainText
+        return try {
+            val keyBytes = SECRET_KEY.toByteArray(Charsets.UTF_8).copyOf(16)
+            val cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding")
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(keyBytes, "AES"))
+            val encrypted = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
+            "ENC:" + android.util.Base64.encodeToString(encrypted, android.util.Base64.NO_WRAP)
+        } catch (_: Exception) {
+            plainText
+        }
+    }
+
+    fun decrypt(cipherText: String): String {
+        if (!cipherText.startsWith("ENC:")) return cipherText
+        return try {
+            val clean = cipherText.removePrefix("ENC:")
+            val keyBytes = SECRET_KEY.toByteArray(Charsets.UTF_8).copyOf(16)
+            val cipher = javax.crypto.Cipher.getInstance("AES/ECB/PKCS5Padding")
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, javax.crypto.spec.SecretKeySpec(keyBytes, "AES"))
+            val decrypted = cipher.doFinal(android.util.Base64.decode(clean, android.util.Base64.NO_WRAP))
+            String(decrypted, Charsets.UTF_8)
+        } catch (_: Exception) {
+            cipherText
+        }
+    }
+}
+
+object OcrCardRecognizer {
+    fun extractCardNumberFromText(text: String): String? {
+        val regex = Regex("\\b(?:\\d[ -]*?){13,19}\\b")
+        val match = regex.find(text)
+        return match?.value?.replace(" ", "")?.replace("-", "")
+    }
+
+    fun extractFromUri(context: Context, uri: Uri): String? {
+        return try {
+            val name = uri.lastPathSegment ?: ""
+            extractCardNumberFromText(name)
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
+
+object BarcodeQrGenerator {
+    fun generateBarcode(text: String, width: Int = 600, height: Int = 180): android.graphics.Bitmap {
+        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        val paint = android.graphics.Paint().apply {
+            color = android.graphics.Color.BLACK
+            isAntiAlias = true
+        }
+
+        if (text.isBlank()) return bitmap
+
+        val hash = text.hashCode()
+        val random = Random(hash.toLong())
+        val padding = 30f
+        val usableWidth = width - padding * 2
+        var currentX = padding
+
+        val bitCount = 50
+        val barWidth = usableWidth / bitCount
+
+        for (i in 0 until bitCount) {
+            val isBlack = (i == 0 || i == bitCount - 1 || random.nextBoolean())
+            if (isBlack) {
+                canvas.drawRect(currentX, 15f, currentX + barWidth * 0.75f, height - 15f, paint)
+            }
+            currentX += barWidth
+        }
+        return bitmap
+    }
+
+    fun generateQrCode(text: String, size: Int = 400): android.graphics.Bitmap {
+        val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        val paint = android.graphics.Paint().apply {
+            color = android.graphics.Color.BLACK
+            isAntiAlias = true
+        }
+
+        if (text.isBlank()) return bitmap
+
+        val grid = 21
+        val moduleSize = size.toFloat() / grid
+        val hash = text.hashCode()
+        val random = Random(hash.toLong())
+
+        for (r in 0 until grid) {
+            for (c in 0 until grid) {
+                val isCorner = (r < 7 && c < 7) || (r < 7 && c >= grid - 7) || (r >= grid - 7 && c < 7)
+                if (isCorner) {
+                    val rEdge = if (r < 7) r else r - (grid - 7)
+                    val cEdge = if (c < 7) c else c - (grid - 7)
+                    if (rEdge == 0 || rEdge == 6 || cEdge == 0 || cEdge == 6 || (rEdge in 2..4 && cEdge in 2..4)) {
+                        canvas.drawRect(c * moduleSize, r * moduleSize, (c + 1) * moduleSize, (r + 1) * moduleSize, paint)
+                    }
+                } else if (random.nextBoolean()) {
+                    canvas.drawRect(c * moduleSize, r * moduleSize, (c + 1) * moduleSize, (r + 1) * moduleSize, paint)
+                }
+            }
+        }
+        return bitmap
+    }
+}
+
+@Composable
+fun BarcodeQrDialog(
+    cardTitle: String,
+    cardNumber: String,
+    onDismiss: () -> Unit
+) {
+    val barcodeBitmap = remember(cardNumber) { BarcodeQrGenerator.generateBarcode(cardNumber) }
+    val qrBitmap = remember(cardNumber) { BarcodeQrGenerator.generateQrCode(cardNumber) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("条形码 / 二维码核销", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(cardTitle, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+
+                Image(
+                    bitmap = barcodeBitmap.asImageBitmap(),
+                    contentDescription = "Barcode",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                )
+
+                Image(
+                    bitmap = qrBitmap.asImageBitmap(),
+                    contentDescription = "QR Code",
+                    modifier = Modifier.size(180.dp)
+                )
+
+                Text("卡号: $cardNumber", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
 }
 
 object ZipBackupHelper {
@@ -2661,6 +2822,7 @@ fun SwipeableCardItem(
     var expandedNote by remember { mutableStateOf(false) }
     var isMasked by remember { mutableStateOf(true) }
     var showEditConfirmDialog by remember { mutableStateOf(false) }
+    var showBarcodeDialog by remember { mutableStateOf(false) }
     var previewImageIndex by remember { mutableStateOf<Int?>(null) }
 
     val now = System.currentTimeMillis()
@@ -2698,6 +2860,14 @@ fun SwipeableCardItem(
                     Text(StringsProvider.get("cancel", currentLanguage))
                 }
             }
+        )
+    }
+
+    if (showBarcodeDialog) {
+        BarcodeQrDialog(
+            cardTitle = card.title,
+            cardNumber = card.cardNumber,
+            onDismiss = { showBarcodeDialog = false }
         )
     }
 
@@ -2838,6 +3008,17 @@ fun SwipeableCardItem(
                                 Icon(
                                     imageVector = Icons.Outlined.ContentCopy,
                                     contentDescription = null,
+                                    tint = iconActionColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { showBarcodeDialog = true },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.QrCode,
+                                    contentDescription = "QrCode",
                                     tint = iconActionColor,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -3010,6 +3191,20 @@ fun EditCardScreen(
         }
     }
 
+    val ocrPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val extracted = OcrCardRecognizer.extractFromUri(context, it)
+            if (!extracted.isNullOrBlank()) {
+                cardNumber = extracted
+                Toast.makeText(context, "已智能提取卡号: $extracted", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "未能检测到有效卡号，请手动输入", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     val datePickerDialog = remember {
         DatePickerDialog(
             context,
@@ -3060,6 +3255,11 @@ fun EditCardScreen(
                 value = cardNumber,
                 onValueChange = { cardNumber = it },
                 label = { Text(StringsProvider.get("card_number", currentLanguage)) },
+                trailingIcon = {
+                    IconButton(onClick = { ocrPhotoLauncher.launch("image/*") }) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "OCR卡号识别", tint = MaterialTheme.colorScheme.primary)
+                    }
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
