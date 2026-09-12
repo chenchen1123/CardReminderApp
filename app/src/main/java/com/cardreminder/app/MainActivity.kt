@@ -681,7 +681,8 @@ data class CardItem(
     val isPinned: Boolean = false,
     val pinTime: Long = 0L,
     val bgType: String = "COLOR",
-    val bgValue: String = "0xFFFFFFFF"
+    val bgValue: String = "0xFFFFFFFF",
+    val imagePaths: List<String> = emptyList()
 )
 
 data class OperationHistoryItem(
@@ -721,6 +722,9 @@ object CardStorage {
                 put("pinTime", card.pinTime)
                 put("bgType", card.bgType)
                 put("bgValue", card.bgValue)
+                val imgArr = JSONArray()
+                card.imagePaths.forEach { imgArr.put(it) }
+                put("imagePaths", imgArr)
             }
             jsonArray.put(obj)
         }
@@ -790,6 +794,9 @@ object CardStorage {
                         put("pinTime", card.pinTime)
                         put("bgType", card.bgType)
                         put("bgValue", card.bgValue)
+                        val imgArr = JSONArray()
+                        card.imagePaths.forEach { imgArr.put(it) }
+                        put("imagePaths", imgArr)
                     })
                 }
                 put("snapshotCards", cardsArray.toString())
@@ -815,6 +822,9 @@ object CardStorage {
                 put("pinTime", card.pinTime)
                 put("bgType", card.bgType)
                 put("bgValue", card.bgValue)
+                val imgArr = JSONArray()
+                card.imagePaths.forEach { imgArr.put(it) }
+                put("imagePaths", imgArr)
             }
             jsonArray.put(obj)
         }
@@ -850,6 +860,13 @@ object CardStorage {
             val jsonArray = JSONArray(jsonStr)
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
+                val imagePaths = mutableListOf<String>()
+                val imgArr = obj.optJSONArray("imagePaths")
+                if (imgArr != null) {
+                    for (j in 0 until imgArr.length()) {
+                        imagePaths.add(imgArr.getString(j))
+                    }
+                }
                 list.add(
                     CardItem(
                         id = obj.optString("id", UUID.randomUUID().toString()),
@@ -862,7 +879,8 @@ object CardStorage {
                         isPinned = obj.optBoolean("isPinned", false),
                         pinTime = obj.optLong("pinTime", 0L),
                         bgType = obj.optString("bgType", "COLOR"),
-                        bgValue = obj.optString("bgValue", "0xFFFFFFFF")
+                        bgValue = obj.optString("bgValue", "0xFFFFFFFF"),
+                        imagePaths = imagePaths
                     )
                 )
             }
@@ -1084,6 +1102,248 @@ object ExcelExportImportHelper {
         }
         list.add(sb.toString().trim())
         return list
+    }
+}
+
+object ZipBackupHelper {
+    fun exportZipBackup(context: Context, cards: List<CardItem>) {
+        try {
+            val exportDir = File(context.filesDir, "exports").apply { mkdirs() }
+            val fileName = "卡片完整数据备份_${SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())}.zip"
+            val zipFile = File(exportDir, fileName)
+
+            FileOutputStream(zipFile).use { fos ->
+                java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(fos)).use { zos ->
+                    val jsonArray = JSONArray()
+                    val imagesToCopy = mutableSetOf<String>()
+
+                    cards.forEach { card ->
+                        val obj = JSONObject().apply {
+                            put("id", card.id)
+                            put("title", card.title)
+                            put("cardNumber", card.cardNumber)
+                            put("category", card.category)
+                            put("note", card.note)
+                            put("expiryDateMillis", card.expiryDateMillis)
+                            put("intervalDays", card.intervalDays)
+                            put("isPinned", card.isPinned)
+                            put("pinTime", card.pinTime)
+                            put("bgType", card.bgType)
+
+                            if (card.bgType == "URI" && card.bgValue.isNotBlank()) {
+                                val bgFile = File(card.bgValue)
+                                if (bgFile.exists()) {
+                                    val zipImgName = "images/${bgFile.name}"
+                                    put("bgValue", zipImgName)
+                                    imagesToCopy.add(card.bgValue)
+                                } else {
+                                    put("bgValue", card.bgValue)
+                                }
+                            } else {
+                                put("bgValue", card.bgValue)
+                            }
+
+                            val imgArray = JSONArray()
+                            card.imagePaths.forEach { imgPath ->
+                                val imgFile = File(imgPath)
+                                if (imgFile.exists()) {
+                                    val zipImgName = "images/${imgFile.name}"
+                                    imgArray.put(zipImgName)
+                                    imagesToCopy.add(imgPath)
+                                } else {
+                                    imgArray.put(imgPath)
+                                }
+                            }
+                            put("imagePaths", imgArray)
+                        }
+                        jsonArray.put(obj)
+                    }
+
+                    zos.putNextEntry(java.util.zip.ZipEntry("cards.json"))
+                    zos.write(jsonArray.toString().toByteArray(Charsets.UTF_8))
+                    zos.closeEntry()
+
+                    imagesToCopy.forEach { imgPath ->
+                        val file = File(imgPath)
+                        if (file.exists()) {
+                            zos.putNextEntry(java.util.zip.ZipEntry("images/${file.name}"))
+                            file.inputStream().use { fis ->
+                                fis.copyTo(zos)
+                            }
+                            zos.closeEntry()
+                        }
+                    }
+                }
+            }
+
+            CardStorage.saveLastExportTime(context)
+
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", zipFile)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "卡片完整备份 (包含图片)")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, "导出/分享完整备份包 (.zip)"))
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "导出备份失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun parseZipBackupUri(context: Context, uri: Uri): List<CardItem> {
+        val result = mutableListOf<CardItem>()
+        try {
+            val tempDir = File(context.cacheDir, "zip_import_${System.currentTimeMillis()}").apply { mkdirs() }
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return emptyList()
+
+            java.util.zip.ZipInputStream(java.io.BufferedInputStream(inputStream)).use { zis ->
+                var entry: java.util.zip.ZipEntry? = zis.nextEntry
+                while (entry != null) {
+                    val entryName = entry.name
+                    if (!entry.isDirectory) {
+                        val outFile = File(tempDir, entryName)
+                        outFile.parentFile?.mkdirs()
+                        FileOutputStream(outFile).use { fos ->
+                            zis.copyTo(fos)
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+            }
+
+            val jsonFile = File(tempDir, "cards.json")
+            if (!jsonFile.exists()) {
+                tempDir.deleteRecursively()
+                return emptyList()
+            }
+
+            val jsonStr = jsonFile.readText(Charsets.UTF_8)
+            val jsonArray = JSONArray(jsonStr)
+
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+
+                var bgType = obj.optString("bgType", "COLOR")
+                var bgValue = obj.optString("bgValue", "0xFFFFFFFF")
+
+                if (bgType == "URI" && bgValue.startsWith("images/")) {
+                    val extractedImg = File(tempDir, bgValue)
+                    if (extractedImg.exists()) {
+                        val newFile = File(context.filesDir, extractedImg.name)
+                        extractedImg.copyTo(newFile, overwrite = true)
+                        bgValue = newFile.absolutePath
+                    }
+                }
+
+                val imagePaths = mutableListOf<String>()
+                val imgArr = obj.optJSONArray("imagePaths")
+                if (imgArr != null) {
+                    for (j in 0 until imgArr.length()) {
+                        val relPath = imgArr.getString(j)
+                        if (relPath.startsWith("images/")) {
+                            val extractedImg = File(tempDir, relPath)
+                            if (extractedImg.exists()) {
+                                val newFile = File(context.filesDir, extractedImg.name)
+                                extractedImg.copyTo(newFile, overwrite = true)
+                                imagePaths.add(newFile.absolutePath)
+                            } else {
+                                imagePaths.add(relPath)
+                            }
+                        } else {
+                            imagePaths.add(relPath)
+                        }
+                    }
+                }
+
+                result.add(
+                    CardItem(
+                        id = obj.optString("id", UUID.randomUUID().toString()),
+                        title = obj.optString("title", ""),
+                        cardNumber = obj.optString("cardNumber", ""),
+                        category = obj.optString("category", "其他"),
+                        note = obj.optString("note", ""),
+                        expiryDateMillis = obj.optLong("expiryDateMillis", System.currentTimeMillis()),
+                        intervalDays = obj.optInt("intervalDays", 30),
+                        isPinned = obj.optBoolean("isPinned", false),
+                        pinTime = obj.optLong("pinTime", 0L),
+                        bgType = bgType,
+                        bgValue = bgValue,
+                        imagePaths = imagePaths
+                    )
+                )
+            }
+
+            tempDir.deleteRecursively()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "解析备份包失败: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+        return result
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ImagePreviewDialog(
+    imagePaths: List<String>,
+    initialIndex: Int = 0,
+    onDismiss: () -> Unit
+) {
+    if (imagePaths.isEmpty()) return
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, imagePaths.size - 1),
+        pageCount = { imagePaths.size }
+    )
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = imagePaths[page],
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${imagePaths.size}",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                }
+            }
+        }
     }
 }
 
@@ -1482,6 +1742,13 @@ fun MainTabContainer() {
                             },
                             onHistoryTimelineClick = {
                                 isViewingHistory = true
+                            },
+                            onExportZipClick = {
+                                if (cardList.isEmpty()) {
+                                    Toast.makeText(context, StringsProvider.get("empty_data", currentLanguage), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    ZipBackupHelper.exportZipBackup(context, cardList)
+                                }
                             },
                             onExportClick = {
                                 if (cardList.isEmpty()) {
@@ -2158,7 +2425,7 @@ fun CategorizedHomeScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             items(categories) { category ->
-                val categoryCards = cardList.filter { it.category == category }
+                val categoryCards = cardList.filter { it.category == category }.sortedBy { it.expiryDateMillis }
                 if (categoryCards.isNotEmpty()) {
                     val urgentCount = categoryCards.count {
                         val diffDays = (it.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
@@ -2393,6 +2660,8 @@ fun SwipeableCardItem(
     val clipboardManager = LocalClipboardManager.current
     var expandedNote by remember { mutableStateOf(false) }
     var isMasked by remember { mutableStateOf(true) }
+    var showEditConfirmDialog by remember { mutableStateOf(false) }
+    var previewImageIndex by remember { mutableStateOf<Int?>(null) }
 
     val now = System.currentTimeMillis()
     val diffDays = (card.expiryDateMillis - now) / (1000 * 60 * 60 * 24)
@@ -2400,7 +2669,7 @@ fun SwipeableCardItem(
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.StartToEnd) {
-                onEdit()
+                showEditConfirmDialog = true
                 false
             } else if (value == SwipeToDismissBoxValue.EndToStart) {
                 onDelete()
@@ -2408,6 +2677,37 @@ fun SwipeableCardItem(
             } else false
         }
     )
+
+    if (showEditConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditConfirmDialog = false },
+            title = { Text("确认修改卡片", fontWeight = FontWeight.Bold) },
+            text = { Text("是否确定要修改卡片「${card.title}」的信息？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showEditConfirmDialog = false
+                        onEdit()
+                    }
+                ) {
+                    Text(StringsProvider.get("confirm", currentLanguage))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditConfirmDialog = false }) {
+                    Text(StringsProvider.get("cancel", currentLanguage))
+                }
+            }
+        )
+    }
+
+    if (previewImageIndex != null) {
+        ImagePreviewDialog(
+            imagePaths = card.imagePaths,
+            initialIndex = previewImageIndex!!,
+            onDismiss = { previewImageIndex = null }
+        )
+    }
 
     SwipeToDismissBox(
         state = dismissState,
@@ -2545,6 +2845,39 @@ fun SwipeableCardItem(
                         }
                     }
 
+                    if (card.imagePaths.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            card.imagePaths.take(4).forEachIndexed { idx, path ->
+                                AsyncImage(
+                                    model = path,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { previewImageIndex = idx }
+                                )
+                            }
+                            if (card.imagePaths.size > 4) {
+                                Surface(
+                                    color = Color.Black.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clickable { previewImageIndex = 4 }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text("+${card.imagePaths.size - 4}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (card.note.isNotBlank()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         androidx.compose.animation.AnimatedVisibility(visible = expandedNote) {
@@ -2641,6 +2974,9 @@ fun EditCardScreen(
     var bgType by remember { mutableStateOf(initialCard?.bgType ?: "COLOR") }
     var bgValue by remember { mutableStateOf(initialCard?.bgValue ?: "0xFFFFFFFF") }
 
+    var attachedImagePaths by remember { mutableStateOf(initialCard?.imagePaths ?: emptyList()) }
+    var previewImageIndex by remember { mutableStateOf<Int?>(null) }
+
     val calendar = remember {
         Calendar.getInstance().apply {
             timeInMillis = initialCard?.expiryDateMillis ?: (System.currentTimeMillis() + 86400000L * 30)
@@ -2665,6 +3001,15 @@ fun EditCardScreen(
         }
     }
 
+    val multiPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            val newPaths = uris.map { saveImageToInternalStorage(context, it) }
+            attachedImagePaths = attachedImagePaths + newPaths
+        }
+    }
+
     val datePickerDialog = remember {
         DatePickerDialog(
             context,
@@ -2676,6 +3021,14 @@ fun EditCardScreen(
             selectedYear,
             selectedMonth - 1,
             selectedDay
+        )
+    }
+
+    if (previewImageIndex != null) {
+        ImagePreviewDialog(
+            imagePaths = attachedImagePaths,
+            initialIndex = previewImageIndex!!,
+            onDismiss = { previewImageIndex = null }
         )
     }
 
@@ -2787,6 +3140,59 @@ fun EditCardScreen(
                 }
             }
 
+            Text("卡片自定义附件图片 (点击可放大左右滑动):", fontSize = 13.sp, color = Color.Gray)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { multiPhotoLauncher.launch("image/*") },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("添加多张图片", fontSize = 12.sp)
+                }
+
+                if (attachedImagePaths.isNotEmpty()) {
+                    Text("已添加 ${attachedImagePaths.size} 张", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            if (attachedImagePaths.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    itemsIndexed(attachedImagePaths) { index, path ->
+                        Box(modifier = Modifier.size(72.dp)) {
+                            AsyncImage(
+                                model = path,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { previewImageIndex = index }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(20.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    .clickable {
+                                        attachedImagePaths = attachedImagePaths.filterIndexed { i, _ -> i != index }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Delete", tint = Color.White, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
             Text(StringsProvider.get("expire_date_label", currentLanguage), fontSize = 13.sp, color = Color.Gray)
             OutlinedCard(
                 onClick = { datePickerDialog.show() },
@@ -2875,7 +3281,8 @@ fun EditCardScreen(
                         isPinned = initialCard?.isPinned ?: false,
                         pinTime = initialCard?.pinTime ?: 0L,
                         bgType = bgType,
-                        bgValue = bgValue
+                        bgValue = bgValue,
+                        imagePaths = attachedImagePaths
                     )
                     onSave(card)
                 },
@@ -2897,6 +3304,7 @@ fun ProfileScreen(
     onLanguageChanged: (AppLanguage) -> Unit,
     onBatchManageClick: () -> Unit,
     onHistoryTimelineClick: () -> Unit,
+    onExportZipClick: () -> Unit,
     onExportClick: () -> Unit,
     onExportTemplateClick: () -> Unit,
     onImportFileParsed: (List<CardItem>) -> Unit,
@@ -2910,7 +3318,14 @@ fun ProfileScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val parsedCards = ExcelExportImportHelper.parseCsvFromUri(context, it)
+            val mimeType = context.contentResolver.getType(it) ?: ""
+            val pathStr = it.toString().lowercase(Locale.ROOT)
+            val isZip = mimeType.contains("zip") || pathStr.endsWith(".zip")
+            val parsedCards = if (isZip) {
+                ZipBackupHelper.parseZipBackupUri(context, it)
+            } else {
+                ExcelExportImportHelper.parseCsvFromUri(context, it)
+            }
             onImportFileParsed(parsedCards)
         }
     }
@@ -3047,7 +3462,7 @@ fun ProfileScreen(
             ) {
                 Text(StringsProvider.get("data_backup", currentLanguage), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(
-                    if (lastExportTime != null) "上次导出备份时间: $lastExportTime" else "支持与 Excel (.csv) 格式交互，建议定期备份",
+                    if (lastExportTime != null) "上次导出备份时间: $lastExportTime" else "支持图片完整备份与 Excel (.csv) 格式交互",
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
@@ -3057,22 +3472,22 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = onExportClick,
+                        onClick = onExportZipClick,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.FolderZip, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(StringsProvider.get("export_csv", currentLanguage))
+                        Text("导出含图备份", fontSize = 12.sp)
                     }
 
                     OutlinedButton(
-                        onClick = { importLauncher.launch("*/*") },
+                        onClick = onExportClick,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(StringsProvider.get("import_csv", currentLanguage))
+                        Text(StringsProvider.get("export_csv", currentLanguage), fontSize = 12.sp)
                     }
                 }
 
@@ -3080,6 +3495,16 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Button(
+                        onClick = { importLauncher.launch("*/*") },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("导入备份包/表格", fontSize = 12.sp)
+                    }
+
                     OutlinedButton(
                         onClick = onExportTemplateClick,
                         modifier = Modifier.weight(1f)
@@ -3088,10 +3513,15 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(StringsProvider.get("download_template", currentLanguage), fontSize = 12.sp)
                     }
+                }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedButton(
                         onClick = onRestoreClick,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
