@@ -14,4 +14,7 @@ captures/
 *.ap_
 *.apk
 *.aab
+*.jks
+*.keystore
+keystore.properties
 CardReminderApp-main/

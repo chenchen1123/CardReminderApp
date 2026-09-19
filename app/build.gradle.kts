@@ -1,6 +1,15 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -21,17 +30,27 @@ android {
     }
 
     signingConfigs {
-        getByName("debug") {
-            storeFile = file("release.jks")
-            storePassword = "cardreminder123"
-            keyAlias = "cardreminder"
-            keyPassword = "cardreminder123"
-        }
         create("release") {
-            storeFile = file("release.jks")
-            storePassword = "cardreminder123"
-            keyAlias = "cardreminder"
-            keyPassword = "cardreminder123"
+            if (keystorePropertiesFile.exists()) {
+                val ksFile = keystoreProperties.getProperty("storeFile")?.let { file(it) } ?: file("release.jks")
+                if (ksFile.exists()) {
+                    storeFile = ksFile
+                    storePassword = keystoreProperties.getProperty("storePassword")
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                }
+            }
+        }
+        getByName("debug") {
+            if (keystorePropertiesFile.exists()) {
+                val ksFile = keystoreProperties.getProperty("storeFile")?.let { file(it) } ?: file("release.jks")
+                if (ksFile.exists()) {
+                    storeFile = ksFile
+                    storePassword = keystoreProperties.getProperty("storePassword")
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                }
+            }
         }
     }
 
