@@ -22,16 +22,16 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storeFile = file("release.jks")
+            storePassword = "cardreminder123"
+            keyAlias = "cardreminder"
+            keyPassword = "cardreminder123"
         }
         create("release") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storeFile = file("release.jks")
+            storePassword = "cardreminder123"
+            keyAlias = "cardreminder"
+            keyPassword = "cardreminder123"
         }
     }
 
