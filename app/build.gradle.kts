@@ -14,14 +14,14 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.cardreminder.app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.jiaweisi"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 2
-        versionName = "V1.1"
+        targetSdk = 36
+        versionCode = 3
+        versionName = "V1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -56,12 +56,15 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
         }
         debug {
             signingConfig = signingConfigs.getByName("debug")
